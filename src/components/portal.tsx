@@ -1110,6 +1110,7 @@ function HoldingTable({
             <th>资产</th>
             <th>持有数量 / 冻结</th>
             <th>成本 (USDT / 枚)</th>
+            <th>标记价格 (USDT / 枚)</th>
             <th>资产估值 (USDT)</th>
             <th>持仓浮盈亏 (USDT)</th>
             <th>资产占比</th>
@@ -1134,6 +1135,10 @@ function HoldingTable({
               <td className="numeric">
                 <strong>{money(h.averageCost)}</strong>
                 {h.averageCost === null && <small>未设置</small>}
+              </td>
+              <td className="numeric">
+                <strong>{money(h.price)}</strong>
+                {h.price === null && <small>暂无行情</small>}
               </td>
               <td className="numeric">
                 <strong>{money(h.value)}</strong>
@@ -1272,11 +1277,11 @@ function EquityChart({
           />
           <YAxis
             domain={["auto", "auto"]}
-            tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`}
+            tickFormatter={(v) => number(Number(v))}
             axisLine={false}
             tickLine={false}
             tick={{ fill: "#93978d", fontSize: 11 }}
-            width={55}
+            width={88}
           />
           <Tooltip
             labelFormatter={(v) => time(Number(v))}
