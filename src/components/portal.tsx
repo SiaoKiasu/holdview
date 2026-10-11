@@ -1112,61 +1112,76 @@ function HoldingTable({
             <th>成本 (USDT / 枚)</th>
             <th>标记价格 (USDT / 枚)</th>
             <th>资产估值 (USDT)</th>
-            <th>持仓浮盈亏 (USDT)</th>
+            <th>持仓盈亏 (USDT)</th>
             <th>资产占比</th>
           </tr>
         </thead>
         <tbody>
-          {holdings.map((h, i) => (
-            <tr key={h.asset}>
-              <td>
-                <div className="asset-cell">
-                  <Coin asset={h.asset} index={i} />
-                  <div>
-                    <strong>{h.asset}</strong>
-                    <small>{assetNames[h.asset] ?? h.asset}</small>
+          {holdings.map((h, i) => {
+            const returnRate =
+              h.averageCost !== null && Number(h.averageCost) > 0 && h.price !== null
+                ? ((Number(h.price) / Number(h.averageCost) - 1) * 100).toString()
+                : null;
+            return (
+              <tr key={h.asset}>
+                <td>
+                  <div className="asset-cell">
+                    <Coin asset={h.asset} index={i} />
+                    <div>
+                      <strong>{h.asset}</strong>
+                      <small>{assetNames[h.asset] ?? h.asset}</small>
+                    </div>
                   </div>
-                </div>
-              </td>
-              <td className="numeric">
-                <strong>{hidden ? "••••" : number(h.quantity, 8)}</strong>
-                <small>冻结 {hidden ? "••••" : number(h.locked, 8)}</small>
-              </td>
-              <td className="numeric">
-                <strong>{money(h.averageCost)}</strong>
-                {h.averageCost === null && <small>未设置</small>}
-              </td>
-              <td className="numeric">
-                <strong>{money(h.price)}</strong>
-                {h.price === null && <small>暂无行情</small>}
-              </td>
-              <td className="numeric">
-                <strong>{money(h.value)}</strong>
-                {h.value === null && <small>未计入估值</small>}
-              </td>
-              <td className="numeric">
-                <strong
-                  className={
-                    h.unrealizedPnl === null
-                      ? "muted-text"
-                      : Number(h.unrealizedPnl) >= 0
-                        ? "positive"
-                        : "negative"
-                  }
-                >
-                  {STABLECOINS.has(h.asset) ? "—" : profit(h.unrealizedPnl)}
-                </strong>
-              </td>
-              <td>
-                <div className="allocation-cell">
-                  <span>{number(h.allocation, 1)}%</span>
-                  <div>
-                    <i style={{ width: `${h.allocation}%` }} />
+                </td>
+                <td className="numeric">
+                  <strong>{hidden ? "••••" : number(h.quantity, 8)}</strong>
+                  <small>冻结 {hidden ? "••••" : number(h.locked, 8)}</small>
+                </td>
+                <td className="numeric">
+                  <strong>{money(h.averageCost)}</strong>
+                  {h.averageCost === null && <small>未设置</small>}
+                </td>
+                <td className="numeric">
+                  <strong>{money(h.price)}</strong>
+                  {h.price === null && <small>暂无行情</small>}
+                </td>
+                <td className="numeric">
+                  <strong>{money(h.value)}</strong>
+                  {h.value === null && <small>未计入估值</small>}
+                </td>
+                <td className="numeric">
+                  <strong
+                    className={
+                      h.unrealizedPnl === null
+                        ? "muted-text"
+                        : Number(h.unrealizedPnl) >= 0
+                          ? "positive"
+                          : "negative"
+                    }
+                  >
+                    {STABLECOINS.has(h.asset) ? (
+                      "—"
+                    ) : (
+                      <>
+                        {profit(h.unrealizedPnl)}
+                        {!hidden &&
+                          h.unrealizedPnl !== null &&
+                          ` (${returnRate === null ? "—" : `${signed(returnRate)}%`})`}
+                      </>
+                    )}
+                  </strong>
+                </td>
+                <td>
+                  <div className="allocation-cell">
+                    <span>{number(h.allocation, 1)}%</span>
+                    <div>
+                      <i style={{ width: `${h.allocation}%` }} />
+                    </div>
                   </div>
-                </div>
-              </td>
-            </tr>
-          ))}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {!holdings.length && <div className="empty">没有符合条件的资产。</div>}

@@ -49,10 +49,15 @@ describe("realized PnL from historical fills", () => {
     ).toMatchObject({ realizedPnl: null, feePnl: null, missingRates: ["BNB"] });
   });
   it("does not deduct previously expensed buy fees again on partial or full exit", () => {
-    const l = ledger([trade(1, "BUY", "2", "200", "2"), trade(2, "SELL", "1", "150", "1")]);
+    const l = ledger([trade(1, "BUY", "2", "200", "2")]);
+    expect(tradeRealizedPnl(l, true).realizedPnl).toBe("-2");
+    l.markets.ETHUSDT.trades.push(trade(2, "SELL", "1", "150", "1"));
     expect(tradeRealizedPnl(l, true).realizedPnl).toBe("47");
     l.markets.ETHUSDT.trades.push(trade(3, "SELL", "1", "120", "1"));
     expect(tradeRealizedPnl(l, true).realizedPnl).toBe("66");
+    // A new entry only expenses its own fee; prior realized gains stay intact.
+    l.markets.ETHUSDT.trades.push(trade(4, "BUY", "1", "100", "1"));
+    expect(tradeRealizedPnl(l, true).realizedPnl).toBe("65");
   });
   it("shows known fees before history finishes but never labels them complete", () => {
     const l = ledger([trade(1, "BUY", "1", "100", "0.01", "ETH")]);
