@@ -31,11 +31,16 @@ export class BinanceClient {
     private config: Pick<Config, "BINANCE_ENV" | "BINANCE_API_KEY" | "BINANCE_API_SECRET">,
     private transport: typeof fetch = fetch,
     private deadline = Date.now() + 40000,
+    private market: "spot" | "futures" = "spot",
   ) {
     this.base =
-      config.BINANCE_ENV === "testnet"
-        ? "https://testnet.binance.vision"
-        : "https://api.binance.com";
+      market === "futures"
+        ? config.BINANCE_ENV === "testnet"
+          ? "https://demo-fapi.binance.com"
+          : "https://fapi.binance.com"
+        : config.BINANCE_ENV === "testnet"
+          ? "https://testnet.binance.vision"
+          : "https://api.binance.com";
   }
   async request(
     path: string,
@@ -97,7 +102,9 @@ export class BinanceClient {
   }
   async syncTime() {
     const start = Date.now();
-    const data = z.object({ serverTime: z.number() }).parse(await this.request("/api/v3/time"));
+    const data = z
+      .object({ serverTime: z.number() })
+      .parse(await this.request(this.market === "futures" ? "/fapi/v1/time" : "/api/v3/time"));
     this.offset = data.serverTime - Math.round((start + Date.now()) / 2);
   }
   async trades(symbol: string, fromId?: string, limit = 100): Promise<Trade[]> {

@@ -90,3 +90,18 @@ npm start
 [API 文档](docs/API.md) · [OpenAPI](docs/openapi.json) · [架构](docs/ARCHITECTURE.md) · [数据库表](docs/schema.sql)
 
 旧版共享密码、全局 API Token 和单账户环境变量已弃用，迁移步骤见管理员说明。登录限流目前为每实例限流；公开部署可对 `/api/session` 增加 Vercel Firewall 全局限流。
+
+## 合约持仓合并展示
+
+管理员在账户页顶部的「合约账户管理」维护累计净划入 USDT（累计划入减累计划出）。留空不接入，明确填写 0 仍接入。设置只保存统计值，不调用划转接口。普通用户看不到管理入口，也无法读取或修改设置接口。配置按账户和 API Key 隔离，保存在 Neon 的 `slzb_futures_settings`；本地无数据库时保存于私有 `.slzb/futures-settings`，支持版本冲突检查和修改审计。
+
+复用所选账户已有 API，读取 Binance USDⓈ-M USDT 保证金合约：`GET /fapi/v3/positionRisk` 获取开仓价、标记价格、数量和未实现盈亏；`GET /fapi/v1/income` 获取已实现收益、交易手续费和资金费。代码仅发 GET，不交易、不实际划转。账户 API 必须允许这些只读查询；测试网使用独立的 `demo-fapi.binance.com`，不会把测试网密钥发送至主网。币本位、组合保证金以及非 USDT 保证金持仓暂不按 USDT 汇总，遇到不支持的持仓会明确提示。
+
+- **总资产（用户指定口径）**＝现货总资产＋管理员填写的累计净划入；不会再加合约名义价值、浮盈、资金费或已实现盈亏。这是固定划转值口径，不代表实时现货加合约净权益。
+- **已实现盈亏**＝现货已实现盈亏＋合约 `REALIZED_PNL`＋带符号的 `COMMISSION`；合约佣金通常为负，资金费不计入此项。
+- **持仓盈亏**＝现货持仓盈亏＋合约接口未实现盈亏＋带符号的累计 `FUNDING_FEE`；合约收益率为该盈亏除以当前持仓的开仓名义成本，不使用杠杆保证金收益率。
+- **持仓列表**把现货和合约分行显示，合约标注方向。合约资产估值栏为名义价值，占比为对总资产的敞口，不能再次累加到总资产。资产分布图用固定合约划转值作为独立部分，避免把杠杆名义仓位当作实际资产。现金栏仍为现货 USDT。
+- 同一合约的双向持仓合并为一行，数量和成本按绝对数量加权，盈亏使用交易所多空盈亏之和，资金费只加一次。已平仓合约有累计资金费时保留一行；重新开仓后同一标的仍使用累计资金费，不限于本次开仓。
+- 首次读取最近 89 天可获取的流水，后续持续保存并增量同步；历史接口仅保留最近三个月，不能宣称覆盖账户全部历史。流水按类型＋交易 ID 去重，近期数据优先于历史回填，缺失汇率或读取失败不会假设为零。第三币手续费按对应合约分钟收盘价近似折算 USDT。历史缺口、未支持的保证金币种及同步暂计状态会在页面提示。
+
+接口文档：[持仓 V3](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Position-Information-V3)、[资金流水](https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Get-Income-History)。

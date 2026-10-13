@@ -3,17 +3,20 @@ import Decimal from "decimal.js";
 import { createHash } from "node:crypto";
 import type { Config } from "./config";
 import { BinanceClient } from "./binance";
+import { BinanceFuturesClient } from "./binance-futures";
 import { demoData, demoHistory } from "./demo";
 import { STABLECOINS, totalPnl, valueHoldings, resolveEquity } from "./portfolio";
 import { readHistory, saveSnapshot } from "./storage";
 import type { Dashboard, ProviderData } from "./types";
 import { tradeRealizedPnl } from "./trade-pnl";
 import { readCosts } from "./cost-store";
+import { readFuturesSettings } from "./futures-store";
+import { futuresAccounting } from "./futures-pnl";
 import { readLedger, saveLedger } from "./ledger-store";
 type Cached = { data: ProviderData; time: number };
 const cache = new Map<string, Cached>();
 const pending = new Map<string, Promise<Cached>>();
-async function provider(c: Config): Promise<Cached> {
+async function provider(c: Config, futuresEnabled = false): Promise<Cached> {
   if (c.DATA_SOURCE === "demo") return { data: demoData(), time: Date.now() };
   const key = createHash("sha256")
     .update(
@@ -23,6 +26,7 @@ async function provider(c: Config): Promise<Cached> {
         c.BINANCE_API_SECRET,
         c.BINANCE_ENV,
         c.symbols,
+        futuresEnabled,
       ]),
     )
     .digest("hex");
@@ -39,7 +43,21 @@ async function provider(c: Config): Promise<Cached> {
       } catch {
         storageFailed = true;
       }
-      const data = await new BinanceClient(c).load(c.symbols, stored?.ledger);
+      const [spotResult, futuresResult] = await Promise.allSettled([
+        new BinanceClient(c).load(c.symbols, stored?.ledger),
+        futuresEnabled
+          ? new BinanceFuturesClient(c).loadFutures(stored?.ledger.futures)
+          : Promise.resolve(undefined),
+      ]);
+      if (spotResult.status === "rejected") throw spotResult.reason;
+      const data = spotResult.value;
+      if (futuresResult.status === "fulfilled" && futuresResult.value) {
+        data.futures = futuresResult.value;
+        data.warnings.push(...data.futures.warnings);
+        if (data.ledger) data.ledger.futures = data.futures.ledger;
+      } else if (futuresResult.status === "rejected") {
+        data.warnings.push("合约账户暂未读取成功，请检查当前 API 的合约读取权限与 IP 限制。");
+      }
       if (data.ledger && !storageFailed) {
         try {
           await saveLedger(c, data.ledger, stored?.revision);
@@ -64,8 +82,11 @@ async function provider(c: Config): Promise<Cached> {
   return request;
 }
 export async function dashboard(c: Config, persist = false): Promise<Dashboard> {
-  const { data, time } = await provider(c);
   const demo = c.DATA_SOURCE === "demo";
+  const netTransfer = demo ? null : (await readFuturesSettings(c)).netTransfer;
+  const futuresEnabled = netTransfer !== null;
+  const { data, time } = await provider(c, futuresEnabled);
+  const futures = futuresAccounting(futuresEnabled ? data.futures : undefined);
   let costs: Record<string, string> = {};
   let costStorageFailed = false;
   try {
@@ -74,18 +95,41 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
     costStorageFailed = true;
   }
   const accounting = tradeRealizedPnl(data.ledger, data.tradesComplete);
-  const holdings = valueHoldings(data.balances, data.tickers, { ...costs, USDT: "1" });
+  const spotHoldings = valueHoldings(data.balances, data.tickers, { ...costs, USDT: "1" });
   const sum = (values: (string | null)[]) =>
     values.reduce<Decimal>((a, v) => a.plus(v ?? 0), new Decimal(0)).toString();
-  const valuation = resolveEquity(holdings, data.spotEquity);
+  const spotValuation = resolveEquity(spotHoldings, data.spotEquity);
+  // User-defined valuation: futures contribute ONLY the administrator's fixed net transfer.
+  // Never add position notional, futures PnL, funding or exchange wallet equity here.
+  const valuation = {
+    ...spotValuation,
+    equity: new Decimal(spotValuation.equity).plus(netTransfer ?? 0).toString(),
+    equitySource: futuresEnabled ? ("calculated" as const) : spotValuation.equitySource,
+  };
+  const holdings = [...spotHoldings, ...(futuresEnabled ? futures.holdings : [])].map((h) => ({
+    ...h,
+    allocation: new Decimal(valuation.equity).gt(0)
+      ? new Decimal(h.value ?? 0).div(valuation.equity).mul(100).toNumber()
+      : 0,
+  }));
   const { equity, equityComplete } = valuation;
   const unpriced = holdings.filter((h) => h.value === null).length;
   const baseline = demo ? "100000" : c.PERFORMANCE_BASELINE_USDT;
   const netFlows = demo ? "0" : c.PERFORMANCE_NET_FLOWS_USDT;
-  const nonStableHoldings = holdings.filter((h) => !STABLECOINS.has(h.asset));
+  const nonStableHoldings = spotHoldings.filter((h) => !STABLECOINS.has(h.asset));
   const costed = nonStableHoldings.filter((h) => h.unrealizedPnl !== null);
-  const cash = holdings.find((h) => h.asset === "USDT");
-  const warnings = [...data.warnings];
+  const cash = spotHoldings.find((h) => h.asset === "USDT");
+  const warnings = [...data.warnings, ...(futuresEnabled ? futures.warnings : [])];
+  const combine = (spot: string | null, contract: string | null) =>
+    spot === null || (futuresEnabled && contract === null)
+      ? null
+      : new Decimal(spot).plus(futuresEnabled ? contract! : 0).toString();
+  const realizedPnl = combine(accounting.realizedPnl, futures.realizedPnl);
+  const realizedPnlComplete = accounting.complete && (!futuresEnabled || futures.complete);
+  const holdingPnl = combine(
+    costed.length === nonStableHoldings.length ? sum(costed.map((h) => h.unrealizedPnl)) : null,
+    futures.holdingPnl,
+  );
   let history = demo ? demoHistory(equity) : [];
   let saved = false;
   if (!demo && c.DATABASE_URL) {
@@ -104,7 +148,7 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
   if (unpriced)
     warnings.push(
       equityComplete
-        ? `${unpriced} 种资产缺少可用行情，持仓明细估值不完整；总资产使用交易所现货钱包估值。`
+        ? `${unpriced} 种资产缺少可用行情，持仓明细估值不完整；现货部分使用交易所钱包估值。`
         : `${unpriced} 种资产缺少可用行情，当前总额仅为已估值资产小计，累计盈亏暂停计算。`,
     );
   const missingCosts = nonStableHoldings.filter((h) => h.averageCost === null).map((h) => h.asset);
@@ -145,17 +189,20 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
       ...valuation,
       pricedAssets: holdings.length - unpriced,
       unpricedAssets: unpriced,
-      unrealizedPnl:
-        costed.length === nonStableHoldings.length ? sum(costed.map((h) => h.unrealizedPnl)) : null,
-      realizedPnl: accounting.realizedPnl,
-      realizedPnlComplete: accounting.complete,
-      feePnl: accounting.feePnl,
+      ...(futuresEnabled
+        ? { futuresNetTransfer: netTransfer!, futuresFundingPnl: futures.fundingPnl }
+        : {}),
+      unrealizedPnl: holdingPnl,
+      realizedPnl,
+      realizedPnlComplete,
+      feePnl: combine(accounting.feePnl, futures.feePnl),
       realizedPnlNote:
-        accounting.realizedPnl !== null
-          ? accounting.complete
+        realizedPnl !== null
+          ? realizedPnlComplete
             ? "按成交核算 · 逐笔计入当笔手续费"
             : "历史同步中 · 已同步成交暂计（含手续费）"
           : [
+              ...(futuresEnabled && futures.realizedPnl === null ? ["合约流水待核算"] : []),
               ...(!data.tradesComplete ? ["成交历史同步中"] : []),
               ...(accounting.missingBuys.length
                 ? [`缺 ${accounting.missingBuys.join("、")} 历史买入`]
@@ -170,16 +217,21 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
       cashFree: cash?.free ?? "0",
       cashLocked: cash?.locked ?? "0",
       costCoverage: costed.length,
-      totalPnl: totalPnl(equity, baseline, netFlows, equityComplete ? 0 : unpriced),
+      totalPnl: totalPnl(equity, baseline, netFlows, equityComplete ? 0 : Math.max(1, unpriced)),
       baseline: baseline ?? null,
       baselineAt: demo
         ? new Date(Date.now() - 7 * 86400000).toISOString()
         : (c.PERFORMANCE_BASELINE_AT ?? null),
       netFlows: netFlows ?? null,
-      stablecoinValue: sum(holdings.filter((h) => STABLECOINS.has(h.asset)).map((h) => h.value)),
+      stablecoinValue: sum(
+        spotHoldings.filter((h) => STABLECOINS.has(h.asset)).map((h) => h.value),
+      ),
       tradeCount: data.trades.length,
     },
     connection: {
+      futuresEnabled,
+      futuresComplete: !futuresEnabled || futures.complete,
+      futuresHistoryStart: data.futures?.ledger.startTime ?? null,
       database: Boolean(c.DATABASE_URL),
       snapshotsSaved: saved,
       symbols: [...new Set(data.trades.map((t) => t.symbol))],

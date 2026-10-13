@@ -25,3 +25,10 @@ CREATE TABLE IF NOT EXISTS linden_directory (
   revision TEXT NOT NULL,
   ciphertext TEXT NOT NULL
 );
+
+-- Per-account administrator-defined futures net transfers; APIs never move funds.
+CREATE TABLE IF NOT EXISTS slzb_futures_settings (
+  account_id TEXT PRIMARY KEY,
+  revision TEXT NOT NULL,
+  data JSONB NOT NULL
+);

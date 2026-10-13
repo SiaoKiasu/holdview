@@ -25,6 +25,11 @@ export type Order = {
   time: number;
 };
 export type Holding = Balance & {
+  instrument?: "futures";
+  symbol?: string;
+  direction?: "多" | "空" | "双向" | "已平仓";
+  fundingPnl?: string | null;
+  returnRate?: string | null;
   quantity: string;
   price: string | null;
   value: string | null;
@@ -46,9 +51,11 @@ export type TradeLedger = {
   version: 1;
   markets: Record<string, MarketLedger>;
   feeRates?: Record<string, { price: string | null; checkedAt: number }>;
+  futures?: FuturesLedger;
 };
 export type HistorySync = { scanned: number; total: number; oldestCheck: number | null };
 export type ProviderData = {
+  futures?: FuturesData;
   spotEquity?: string | null;
   ledger?: TradeLedger;
   historySync?: HistorySync;
@@ -71,6 +78,8 @@ export type Dashboard = {
   orders: Order[];
   history: Snapshot[];
   summary: {
+    futuresNetTransfer?: string;
+    futuresFundingPnl?: string | null;
     equity: string;
     equitySource: "exchange" | "calculated";
     equityComplete: boolean;
@@ -94,6 +103,9 @@ export type Dashboard = {
     tradeCount: number;
   };
   connection: {
+    futuresEnabled?: boolean;
+    futuresComplete?: boolean;
+    futuresHistoryStart?: number | null;
     historySync: HistorySync;
     database: boolean;
     snapshotsSaved: boolean;
@@ -101,5 +113,37 @@ export type Dashboard = {
     tradesComplete: boolean;
     ordersComplete: boolean;
   };
+  warnings: string[];
+};
+
+export type FuturesIncome = {
+  tranId: string;
+  symbol: string;
+  incomeType: string;
+  income: string;
+  asset: string;
+  time: number;
+};
+export type FuturesPosition = {
+  symbol: string;
+  positionSide: "BOTH" | "LONG" | "SHORT";
+  positionAmt: string;
+  entryPrice: string;
+  markPrice: string;
+  unRealizedProfit: string;
+  marginAsset: string;
+};
+export type FuturesLedger = {
+  incomes: FuturesIncome[];
+  startTime: number;
+  syncedThrough: number;
+  historyGap?: boolean;
+  pending?: { startTime: number; endTime: number; page: number };
+  feeRates: Record<string, string>;
+};
+export type FuturesData = {
+  positions: FuturesPosition[];
+  ledger: FuturesLedger;
+  complete: boolean;
   warnings: string[];
 };

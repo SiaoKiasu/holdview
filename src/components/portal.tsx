@@ -37,6 +37,7 @@ import { STABLECOINS } from "@/lib/assets";
 import dynamic from "next/dynamic";
 const AdminPanel = dynamic(() => import("./admin-panel").then((m) => m.AdminPanel));
 import { CostEditor } from "./cost-editor";
+import { FuturesEditor } from "./futures-editor";
 import { LindenBrand, LindenMark } from "./brand";
 import type { Dashboard, Holding, Trade } from "@/lib/types";
 type Tab = "overview" | "holdings" | "activity" | "admin";
@@ -116,6 +117,8 @@ export function Portal() {
   const [selectedAccount, setSelectedAccount] = useState("");
   const [adminPending, setAdminPending] = useState(false);
   const [costPending, setCostPending] = useState(false);
+  const [futuresPending, setFuturesPending] = useState(false);
+  const [futuresEditorOpen, setFuturesEditorOpen] = useState(false);
   const [costEditorOpen, setCostEditorOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [data, setData] = useState<Dashboard | null>(null);
@@ -140,6 +143,7 @@ export function Portal() {
     setAccounts([]);
     setSelectedAccount("");
     setCostEditorOpen(false);
+    setFuturesEditorOpen(false);
     setSession("loading");
     setError("");
     try {
@@ -242,7 +246,8 @@ export function Portal() {
     }
   }
   async function logout() {
-    if ((adminPending || costPending) && !window.confirm("退出并放弃当前编辑？")) return;
+    if ((adminPending || costPending || futuresPending) && !window.confirm("退出并放弃当前编辑？"))
+      return;
     try {
       await api("/api/session", { method: "DELETE" });
       generation.current++;
@@ -254,6 +259,7 @@ export function Portal() {
       setAccounts([]);
       setSelectedAccount("");
       setCostEditorOpen(false);
+      setFuturesEditorOpen(false);
       setSession("login");
       setError("");
     } catch (e) {
@@ -261,7 +267,7 @@ export function Portal() {
     }
   }
   function navigate(next: Tab) {
-    if (adminPending || costPending) return;
+    if (adminPending || costPending || futuresPending) return;
     generation.current++;
     loading.current = false;
     setBusy(false);
@@ -361,6 +367,9 @@ export function Portal() {
   const syncIssues = data
     ? [
         ...(!data.connection.ordersComplete ? ["挂单读取失败"] : []),
+        ...(data.connection.futuresEnabled && !data.connection.futuresComplete
+          ? ["合约流水待同步"]
+          : []),
         ...(data.summary.unpricedAssets ? [`缺少行情 ${data.summary.unpricedAssets} 项`] : []),
         ...(!data.connection.tradesComplete
           ? [
@@ -372,7 +381,32 @@ export function Portal() {
       ]
     : [];
   const visibleHoldings =
-    data?.holdings.filter((h) => showSmall || h.value === null || Number(h.value) >= 1) ?? [];
+    data?.holdings.filter(
+      (h) =>
+        showSmall ||
+        h.value === null ||
+        Number(h.value) >= 1 ||
+        (h.instrument === "futures" &&
+          h.direction === "已平仓" &&
+          Math.abs(Number(h.unrealizedPnl)) >= 1),
+    ) ?? [];
+  const distribution = [
+    ...visibleHoldings
+      .filter((h) => h.instrument !== "futures" && Number(h.value) > 0)
+      .map((h) => ({ name: h.asset, value: Number(h.value), allocation: h.allocation })),
+    ...(Number(data?.summary.futuresNetTransfer) > 0
+      ? [
+          {
+            name: "合约划转",
+            value: Number(data!.summary.futuresNetTransfer),
+            allocation:
+              Number(data!.summary.equity) > 0
+                ? (Number(data!.summary.futuresNetTransfer) / Number(data!.summary.equity)) * 100
+                : 0,
+          },
+        ]
+      : []),
+  ];
   const holdings = visibleHoldings.filter((h) =>
     h.asset.toLowerCase().includes(search.toLowerCase()),
   );
@@ -453,7 +487,7 @@ export function Portal() {
           ).map((item) => (
             <button
               key={item.id}
-              disabled={adminPending || costPending}
+              disabled={adminPending || costPending || futuresPending}
               className={`nav-item ${tab === item.id ? "active" : ""}`}
               onClick={() => navigate(item.id)}
             >
@@ -465,7 +499,7 @@ export function Portal() {
           {viewer?.role === "admin" && (
             <button
               className={`nav-item ${tab === "admin" ? "active" : ""}`}
-              disabled={costPending}
+              disabled={costPending || futuresPending}
               onClick={() => navigate("admin")}
             >
               <ShieldCheck size={18} />
@@ -530,9 +564,23 @@ export function Portal() {
             {tab !== "admin" && selectedAccount && (
               <div className="heading-actions">
                 {viewer?.role === "admin" && (
-                  <button className="button" onClick={() => setCostEditorOpen((v) => !v)}>
+                  <button
+                    className="button"
+                    disabled={costPending}
+                    onClick={() => setCostEditorOpen((v) => !v)}
+                  >
                     <ShieldCheck size={15} />
                     {costEditorOpen ? "收起成本管理" : "成本管理"}
+                  </button>
+                )}
+                {viewer?.role === "admin" && (
+                  <button
+                    className="button"
+                    disabled={futuresPending}
+                    onClick={() => setFuturesEditorOpen((v) => !v)}
+                  >
+                    <Wallet size={15} />
+                    {futuresEditorOpen ? "收起合约账户管理" : "合约账户管理"}
                   </button>
                 )}
                 {(data?.source === "demo" || error || stale || !syncIssues.length) && (
@@ -542,7 +590,9 @@ export function Portal() {
                       : error || stale
                         ? "数据待更新"
                         : data
-                          ? "Binance 现货"
+                          ? data.connection.futuresEnabled
+                            ? "Binance 现货 / 合约"
+                            : "Binance 现货"
                           : "连接中"}
                   </Badge>
                 )}
@@ -594,7 +644,7 @@ export function Portal() {
                   <select
                     id="managed-account"
                     value={selectedAccount}
-                    disabled={costPending}
+                    disabled={costPending || futuresPending}
                     onChange={(e) => {
                       generation.current++;
                       loading.current = false;
@@ -614,7 +664,7 @@ export function Portal() {
                       </option>
                     ))}
                   </select>
-                  {costPending && <small>保存或重新加载成本后可切换账户</small>}
+                  {(costPending || futuresPending) && <small>保存或重新加载设置后可切换账户</small>}
                 </div>
               )}
               {error && (
@@ -629,8 +679,33 @@ export function Portal() {
                   accountId={selectedAccount}
                   accountLabel={accounts.find((a) => a.id === selectedAccount)?.label ?? ""}
                   onPendingChange={setCostPending}
-                  holdings={data?.holdings ?? []}
+                  holdings={data?.holdings.filter((h) => h.instrument !== "futures") ?? []}
                   trades={data?.trades ?? []}
+                  onSaved={async () => {
+                    const current = ++generation.current;
+                    loading.current = false;
+                    try {
+                      const next = await api(
+                        `/api/dashboard?accountId=${encodeURIComponent(selectedAccount)}`,
+                      );
+                      if (current === generation.current) {
+                        setData(next);
+                        setError("");
+                      }
+                    } catch (e) {
+                      if (current === generation.current) setError((e as Error).message);
+                    } finally {
+                      if (current === generation.current) setBusy(false);
+                    }
+                  }}
+                />
+              )}
+              {viewer?.role === "admin" && futuresEditorOpen && (
+                <FuturesEditor
+                  key={selectedAccount}
+                  accountId={selectedAccount}
+                  accountLabel={accounts.find((a) => a.id === selectedAccount)?.label ?? ""}
+                  onPendingChange={setFuturesPending}
                   onSaved={async () => {
                     const current = ++generation.current;
                     loading.current = false;
@@ -711,7 +786,7 @@ export function Portal() {
                       </div>
                       <div className="stat">
                         <div className="stat-label">
-                          未实现盈亏
+                          {data.connection.futuresEnabled ? "持仓盈亏" : "未实现盈亏"}
                           <BarChart3 size={17} />
                         </div>
                         <div
@@ -721,7 +796,11 @@ export function Portal() {
                           <span>USDT</span>
                         </div>
                         {data.summary.unrealizedPnl === null && (
-                          <div className="stat-note">缺少成本或行情</div>
+                          <div className="stat-note">
+                            {data.connection.futuresEnabled
+                              ? "成本、行情或合约流水待补齐"
+                              : "缺少成本或行情"}
+                          </div>
                         )}
                       </div>
                       <div className="stat">
@@ -792,9 +871,7 @@ export function Portal() {
                             <ResponsiveContainer width="100%" height={180}>
                               <PieChart>
                                 <Pie
-                                  data={visibleHoldings
-                                    .filter((h) => Number(h.value) > 0)
-                                    .map((h) => ({ name: h.asset, value: Number(h.value) }))}
+                                  data={distribution}
                                   dataKey="value"
                                   innerRadius={62}
                                   outerRadius={79}
@@ -803,11 +880,9 @@ export function Portal() {
                                   startAngle={90}
                                   endAngle={-270}
                                 >
-                                  {visibleHoldings
-                                    .filter((h) => Number(h.value) > 0)
-                                    .map((h, i) => (
-                                      <Cell key={h.asset} fill={colors[i % colors.length]} />
-                                    ))}
+                                  {distribution.map((h, i) => (
+                                    <Cell key={h.name} fill={colors[i % colors.length]} />
+                                  ))}
                                 </Pie>
                                 <Tooltip
                                   formatter={(v) =>
@@ -825,11 +900,11 @@ export function Portal() {
                             </div>
                           </div>
                           <div className="allocation-list">
-                            {visibleHoldings.slice(0, 5).map((h, i) => (
-                              <div key={h.asset}>
+                            {distribution.slice(0, 5).map((h, i) => (
+                              <div key={h.name}>
                                 <span>
                                   <i style={{ background: colors[i % colors.length] }} />
-                                  {h.asset}
+                                  {h.name}
                                 </span>
                                 <strong>{number(h.allocation, 1)}%</strong>
                               </div>
@@ -1119,34 +1194,43 @@ function HoldingTable({
         <tbody>
           {holdings.map((h, i) => {
             const returnRate =
-              h.averageCost !== null && Number(h.averageCost) > 0 && h.price !== null
-                ? ((Number(h.price) / Number(h.averageCost) - 1) * 100).toString()
-                : null;
+              h.instrument === "futures"
+                ? (h.returnRate ?? null)
+                : h.averageCost !== null && Number(h.averageCost) > 0 && h.price !== null
+                  ? ((Number(h.price) / Number(h.averageCost) - 1) * 100).toString()
+                  : null;
             return (
-              <tr key={h.asset}>
+              <tr key={`${h.instrument ?? "spot"}:${h.symbol ?? h.asset}`}>
                 <td>
                   <div className="asset-cell">
                     <Coin asset={h.asset} index={i} />
                     <div>
                       <strong>{h.asset}</strong>
-                      <small>{assetNames[h.asset] ?? h.asset}</small>
+                      <small>
+                        {h.instrument === "futures"
+                          ? `合约 · ${h.direction}`
+                          : (assetNames[h.asset] ?? h.asset)}
+                      </small>
                     </div>
                   </div>
                 </td>
                 <td className="numeric">
                   <strong>{hidden ? "••••" : number(h.quantity, 8)}</strong>
-                  <small>冻结 {hidden ? "••••" : number(h.locked, 8)}</small>
+                  {h.instrument !== "futures" && (
+                    <small>冻结 {hidden ? "••••" : number(h.locked, 8)}</small>
+                  )}
                 </td>
                 <td className="numeric">
                   <strong>{money(h.averageCost)}</strong>
-                  {h.averageCost === null && <small>未设置</small>}
+                  {h.averageCost === null && h.instrument !== "futures" && <small>未设置</small>}
                 </td>
                 <td className="numeric">
                   <strong>{money(h.price)}</strong>
-                  {h.price === null && <small>暂无行情</small>}
+                  {h.price === null && h.direction !== "已平仓" && <small>暂无行情</small>}
                 </td>
                 <td className="numeric">
                   <strong>{money(h.value)}</strong>
+                  {h.instrument === "futures" && <small>名义价值</small>}
                   {h.value === null && <small>未计入估值</small>}
                 </td>
                 <td className="numeric">
@@ -1159,7 +1243,7 @@ function HoldingTable({
                           : "negative"
                     }
                   >
-                    {STABLECOINS.has(h.asset) ? (
+                    {h.instrument !== "futures" && STABLECOINS.has(h.asset) ? (
                       "—"
                     ) : (
                       <>
@@ -1173,9 +1257,11 @@ function HoldingTable({
                 </td>
                 <td>
                   <div className="allocation-cell">
-                    <span>{number(h.allocation, 1)}%</span>
+                    <span>
+                      {number(h.allocation, 1)}%{h.instrument === "futures" ? " 敞口" : ""}
+                    </span>
                     <div>
-                      <i style={{ width: `${h.allocation}%` }} />
+                      <i style={{ width: `${Math.max(0, Math.min(100, h.allocation))}%` }} />
                     </div>
                   </div>
                 </td>

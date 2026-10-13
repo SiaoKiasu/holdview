@@ -13,6 +13,9 @@ vi.mock("@/lib/binance", () => ({
 vi.mock("@/lib/cost-store", () => ({ readCosts: mocks.costs }));
 vi.mock("@/lib/ledger-store", () => ({ readLedger: vi.fn(), saveLedger: vi.fn() }));
 vi.mock("@/lib/storage", () => ({ saveSnapshot: mocks.save, readHistory: mocks.history }));
+vi.mock("@/lib/futures-store", () => ({
+  readFuturesSettings: async () => ({ netTransfer: null }),
+}));
 import { dashboard } from "@/lib/service";
 import { getAccountConfig } from "@/lib/config";
 import { configure, fixture } from "./helpers";
