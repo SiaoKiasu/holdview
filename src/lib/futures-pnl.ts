@@ -57,6 +57,24 @@ export function futuresAccounting(data: FuturesData | undefined) {
   );
   // An unsuccessful initial history read must not look like a confirmed zero.
   const hasIncome = data.complete || data.ledger.incomes.length > 0;
+  // Trade details provide a provisional realized subtotal if income history is unavailable.
+  let hasRealized = hasIncome;
+  if (!hasIncome && data.trades?.length) {
+    hasRealized = true;
+    for (const t of data.trades) {
+      const rate =
+        t.feeAsset === "USDT"
+          ? "1"
+          : data.ledger.feeRates[`${t.feeAsset}:${Math.floor(t.time / 60000) * 60000}`];
+      if (!t.symbol.endsWith("USDT") || (Number(t.fee) !== 0 && !rate)) {
+        realizedKnown = false;
+        continue;
+      }
+      const charge = new Decimal(t.fee).mul(rate ?? 0);
+      fees = fees.minus(charge);
+      realized = realized.plus(t.realizedPnl ?? 0).minus(charge);
+    }
+  }
   const holdings: Holding[] = [...symbols].filter(Boolean).flatMap((symbol) => {
     const ps = data.positions.filter((p) => p.symbol === symbol);
     const fundingAmount = fundingBySymbol.get(symbol) ?? new Decimal(0);
@@ -75,8 +93,7 @@ export function futuresAccounting(data: FuturesData | undefined) {
       new Decimal(0),
     );
     const pricePnl = ps.reduce((a, p) => a.plus(p.unRealizedProfit), new Decimal(0));
-    const pnl =
-      valid && hasIncome && !unknownFunding.has(symbol) ? pricePnl.plus(fundingAmount) : null;
+    const pnl = valid ? pricePnl.plus(fundingAmount) : null;
     const long = ps.some((p) => new Decimal(p.positionAmt).gt(0));
     const short = ps.some((p) => new Decimal(p.positionAmt).lt(0));
     return [
@@ -100,6 +117,7 @@ export function futuresAccounting(data: FuturesData | undefined) {
         allocation: 0,
         change24h: null,
         unrealizedPnl: pnl?.toString() ?? null,
+        pnlComplete: data.complete && !unknownFunding.has(symbol),
         fundingPnl: hasIncome && !unknownFunding.has(symbol) ? fundingAmount.toString() : null,
         returnRate: pnl !== null && basis.gt(0) ? pnl.div(basis).mul(100).toString() : null,
       },
@@ -112,12 +130,19 @@ export function futuresAccounting(data: FuturesData | undefined) {
   if (unsupported) warnings.push("存在非 USDT 保证金合约，该部分盈亏尚不支持按 USDT 汇总。");
   return {
     holdings,
-    realizedPnl: hasIncome && realizedKnown && !unsupported ? realized.toString() : null,
-    feePnl: hasIncome && realizedKnown ? fees.toString() : null,
+    realizedPnl: hasRealized && realizedKnown && !unsupported ? realized.toString() : null,
+    feePnl: hasRealized && realizedKnown ? fees.toString() : null,
     holdingPnl:
-      hasIncome && fundingKnown && !unsupported ? positionPnl.plus(funding).toString() : null,
+      data.positionsComplete !== false && !unsupported
+        ? positionPnl.plus(funding).toString()
+        : null,
     fundingPnl: hasIncome && fundingKnown ? funding.toString() : null,
-    complete: data.complete && realizedKnown && fundingKnown && !unsupported,
+    complete:
+      data.complete &&
+      data.positionsComplete !== false &&
+      realizedKnown &&
+      fundingKnown &&
+      !unsupported,
     warnings,
   };
 }

@@ -85,9 +85,50 @@ describe("per-user monitoring API", () => {
     expect(calls).toContain("alice-key");
     expect(calls).toContain("bob-key");
   });
+
+  it("routes futures trade queries to the signed futures API preserving 64-bit IDs", async () => {
+    configure(fixture("binance"));
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string, init: RequestInit) => {
+        const u = new URL(input);
+        calls.push(u.pathname);
+        expect(u.hostname).toBe("fapi.binance.com");
+        if (u.pathname.endsWith("time")) return Response.json({ serverTime: Date.now() });
+        expect((init.headers as Record<string, string>)["X-MBX-APIKEY"]).toBe("alice-key");
+        expect(u.searchParams.get("fromId")).toBe("9007199254740993");
+        return new Response(
+          '[{"id":9007199254740993,"symbol":"PONSUSDT","side":"SELL","price":"0.3","qty":"5","quoteQty":"1.5","commission":"0.001","commissionAsset":"USDT","time":1234,"maker":false,"realizedPnl":"0.1"}]',
+        );
+      }),
+    );
+    const response = await GET(
+      request(
+        "/api/trades?market=futures&symbol=PONSUSDT&fromId=9007199254740993&limit=1",
+        "alice",
+      ),
+      context("trades"),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data[0]).toMatchObject({
+      instrument: "futures",
+      id: "9007199254740993",
+      realizedPnl: "0.1",
+      fee: "0.001",
+    });
+    expect(body.nextFromId).toBe("9007199254740994");
+    expect(calls).toEqual(["/fapi/v1/time", "/fapi/v1/userTrades"]);
+  });
   it("rejects malformed symbols, missing symbol pagination and unsupported resources", async () => {
     configure();
-    for (const query of ["symbol=../../bad", "symbol=BTCUSDT&limit=1001", "fromId=0"]) {
+    for (const query of [
+      "symbol=../../bad",
+      "symbol=BTCUSDT&limit=1001",
+      "fromId=0",
+      "market=invalid",
+    ]) {
       expect((await GET(request(`/api/trades?${query}`), context("trades"))).status).toBe(400);
     }
     expect((await GET(request("/api/admin"), context("admin"))).status).toBe(404);

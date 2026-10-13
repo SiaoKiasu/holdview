@@ -1,3 +1,21 @@
+vi.mock("@/lib/binance-futures", () => ({
+  BinanceFuturesClient: class {
+    async loadFutures() {
+      return {
+        account: { equity: "0", walletBalance: "0", availableBalance: "0", initialMargin: "0" },
+        positions: [],
+        positionsComplete: true,
+        trades: [],
+        tradesComplete: true,
+        ledger: { incomes: [], feeRates: {}, startTime: 0, syncedThrough: Date.now() },
+        complete: true,
+        warnings: [],
+      };
+    }
+  },
+  incomeRateKey: (i: { asset: string; time: number }) =>
+    `${i.asset}:${Math.floor(i.time / 60000) * 60000}`,
+}));
 import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
@@ -13,9 +31,6 @@ vi.mock("@/lib/binance", () => ({
 vi.mock("@/lib/cost-store", () => ({ readCosts: mocks.costs }));
 vi.mock("@/lib/ledger-store", () => ({ readLedger: vi.fn(), saveLedger: vi.fn() }));
 vi.mock("@/lib/storage", () => ({ saveSnapshot: mocks.save, readHistory: mocks.history }));
-vi.mock("@/lib/futures-store", () => ({
-  readFuturesSettings: async () => ({ netTransfer: null }),
-}));
 import { dashboard } from "@/lib/service";
 import { getAccountConfig } from "@/lib/config";
 import { configure, fixture } from "./helpers";

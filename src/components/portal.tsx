@@ -37,7 +37,6 @@ import { STABLECOINS } from "@/lib/assets";
 import dynamic from "next/dynamic";
 const AdminPanel = dynamic(() => import("./admin-panel").then((m) => m.AdminPanel));
 import { CostEditor } from "./cost-editor";
-import { FuturesEditor } from "./futures-editor";
 import { LindenBrand, LindenMark } from "./brand";
 import type { Dashboard, Holding, Trade } from "@/lib/types";
 type Tab = "overview" | "holdings" | "activity" | "admin";
@@ -117,8 +116,6 @@ export function Portal() {
   const [selectedAccount, setSelectedAccount] = useState("");
   const [adminPending, setAdminPending] = useState(false);
   const [costPending, setCostPending] = useState(false);
-  const [futuresPending, setFuturesPending] = useState(false);
-  const [futuresEditorOpen, setFuturesEditorOpen] = useState(false);
   const [costEditorOpen, setCostEditorOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [data, setData] = useState<Dashboard | null>(null);
@@ -143,7 +140,6 @@ export function Portal() {
     setAccounts([]);
     setSelectedAccount("");
     setCostEditorOpen(false);
-    setFuturesEditorOpen(false);
     setSession("loading");
     setError("");
     try {
@@ -246,8 +242,7 @@ export function Portal() {
     }
   }
   async function logout() {
-    if ((adminPending || costPending || futuresPending) && !window.confirm("退出并放弃当前编辑？"))
-      return;
+    if ((adminPending || costPending) && !window.confirm("退出并放弃当前编辑？")) return;
     try {
       await api("/api/session", { method: "DELETE" });
       generation.current++;
@@ -259,7 +254,6 @@ export function Portal() {
       setAccounts([]);
       setSelectedAccount("");
       setCostEditorOpen(false);
-      setFuturesEditorOpen(false);
       setSession("login");
       setError("");
     } catch (e) {
@@ -267,7 +261,7 @@ export function Portal() {
     }
   }
   function navigate(next: Tab) {
-    if (adminPending || costPending || futuresPending) return;
+    if (adminPending || costPending) return;
     generation.current++;
     loading.current = false;
     setBusy(false);
@@ -367,6 +361,9 @@ export function Portal() {
   const syncIssues = data
     ? [
         ...(!data.connection.ordersComplete ? ["挂单读取失败"] : []),
+        ...(data.connection.futuresEnabled && !data.connection.futuresTradesComplete
+          ? ["合约成交待同步"]
+          : []),
         ...(data.connection.futuresEnabled && !data.connection.futuresComplete
           ? ["合约流水待同步"]
           : []),
@@ -421,6 +418,7 @@ export function Portal() {
   function exportTrades() {
     const rows = [
       [
+        "市场",
         "成交ID",
         "交易对",
         "方向",
@@ -432,6 +430,7 @@ export function Portal() {
         "时间(UTC)",
       ],
       ...trades.map((t) => [
+        t.instrument === "futures" ? "合约" : "现货",
         t.id,
         t.symbol,
         t.side,
@@ -487,7 +486,7 @@ export function Portal() {
           ).map((item) => (
             <button
               key={item.id}
-              disabled={adminPending || costPending || futuresPending}
+              disabled={adminPending || costPending}
               className={`nav-item ${tab === item.id ? "active" : ""}`}
               onClick={() => navigate(item.id)}
             >
@@ -499,7 +498,7 @@ export function Portal() {
           {viewer?.role === "admin" && (
             <button
               className={`nav-item ${tab === "admin" ? "active" : ""}`}
-              disabled={costPending || futuresPending}
+              disabled={costPending}
               onClick={() => navigate("admin")}
             >
               <ShieldCheck size={18} />
@@ -573,16 +572,6 @@ export function Portal() {
                     {costEditorOpen ? "收起成本管理" : "成本管理"}
                   </button>
                 )}
-                {viewer?.role === "admin" && (
-                  <button
-                    className="button"
-                    disabled={futuresPending}
-                    onClick={() => setFuturesEditorOpen((v) => !v)}
-                  >
-                    <Wallet size={15} />
-                    {futuresEditorOpen ? "收起合约账户管理" : "合约账户管理"}
-                  </button>
-                )}
                 {(data?.source === "demo" || error || stale || !syncIssues.length) && (
                   <Badge muted={data?.source === "demo" || Boolean(error) || Boolean(stale)}>
                     {data?.source === "demo"
@@ -644,7 +633,7 @@ export function Portal() {
                   <select
                     id="managed-account"
                     value={selectedAccount}
-                    disabled={costPending || futuresPending}
+                    disabled={costPending}
                     onChange={(e) => {
                       generation.current++;
                       loading.current = false;
@@ -664,7 +653,7 @@ export function Portal() {
                       </option>
                     ))}
                   </select>
-                  {(costPending || futuresPending) && <small>保存或重新加载设置后可切换账户</small>}
+                  {costPending && <small>保存或重新加载设置后可切换账户</small>}
                 </div>
               )}
               {error && (
@@ -681,31 +670,6 @@ export function Portal() {
                   onPendingChange={setCostPending}
                   holdings={data?.holdings.filter((h) => h.instrument !== "futures") ?? []}
                   trades={data?.trades ?? []}
-                  onSaved={async () => {
-                    const current = ++generation.current;
-                    loading.current = false;
-                    try {
-                      const next = await api(
-                        `/api/dashboard?accountId=${encodeURIComponent(selectedAccount)}`,
-                      );
-                      if (current === generation.current) {
-                        setData(next);
-                        setError("");
-                      }
-                    } catch (e) {
-                      if (current === generation.current) setError((e as Error).message);
-                    } finally {
-                      if (current === generation.current) setBusy(false);
-                    }
-                  }}
-                />
-              )}
-              {viewer?.role === "admin" && futuresEditorOpen && (
-                <FuturesEditor
-                  key={selectedAccount}
-                  accountId={selectedAccount}
-                  accountLabel={accounts.find((a) => a.id === selectedAccount)?.label ?? ""}
-                  onPendingChange={setFuturesPending}
                   onSaved={async () => {
                     const current = ++generation.current;
                     loading.current = false;
@@ -787,6 +751,10 @@ export function Portal() {
                       <div className="stat">
                         <div className="stat-label">
                           {data.connection.futuresEnabled ? "持仓盈亏" : "未实现盈亏"}
+                          {data.summary.holdingPnlComplete === false &&
+                            data.summary.unrealizedPnl !== null && (
+                              <span className="subtle-tag">暂计</span>
+                            )}
                           <BarChart3 size={17} />
                         </div>
                         <div
@@ -1230,7 +1198,7 @@ function HoldingTable({
                 </td>
                 <td className="numeric">
                   <strong>{money(h.value)}</strong>
-                  {h.instrument === "futures" && <small>名义价值</small>}
+
                   {h.value === null && <small>未计入估值</small>}
                 </td>
                 <td className="numeric">
@@ -1254,12 +1222,13 @@ function HoldingTable({
                       </>
                     )}
                   </strong>
+                  {h.instrument === "futures" && h.pnlComplete === false && (
+                    <small>资金费待同步</small>
+                  )}
                 </td>
                 <td>
                   <div className="allocation-cell">
-                    <span>
-                      {number(h.allocation, 1)}%{h.instrument === "futures" ? " 敞口" : ""}
-                    </span>
+                    <span>{number(h.allocation, 1)}%</span>
                     <div>
                       <i style={{ width: `${Math.max(0, Math.min(100, h.allocation))}%` }} />
                     </div>
@@ -1291,10 +1260,13 @@ function TradeTable({ trades, hidden }: { trades: Trade[]; hidden: boolean }) {
         </thead>
         <tbody>
           {trades.map((t) => (
-            <tr key={`${t.symbol}-${t.id}`}>
+            <tr key={`${t.instrument ?? "spot"}-${t.symbol}-${t.id}`}>
               <td>
                 <strong>{t.symbol}</strong>
-                <small>{t.isMaker ? "Maker" : "Taker"}</small>
+                <small>
+                  {t.instrument === "futures" ? "合约 · " : ""}
+                  {t.isMaker ? "Maker" : "Taker"}
+                </small>
               </td>
               <td>
                 <span className={`side-pill ${t.side === "BUY" ? "buy" : "sell"}`}>

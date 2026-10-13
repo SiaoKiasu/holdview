@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   spot: vi.fn(),
   futures: vi.fn(),
-  settings: vi.fn(),
   ledger: vi.fn(),
   save: vi.fn(),
   snapshot: vi.fn(),
@@ -19,7 +18,6 @@ vi.mock("@/lib/binance-futures", () => ({
   incomeRateKey: (i: { asset: string; time: number }) =>
     `${i.asset}:${Math.floor(i.time / 60000) * 60000}`,
 }));
-vi.mock("@/lib/futures-store", () => ({ readFuturesSettings: mocks.settings }));
 vi.mock("@/lib/cost-store", () => ({ readCosts: async () => ({ costs: { BTC: "100" } }) }));
 vi.mock("@/lib/ledger-store", () => ({ readLedger: mocks.ledger, saveLedger: mocks.save }));
 vi.mock("@/lib/storage", () => ({ saveSnapshot: mocks.snapshot, readHistory: async () => [] }));
@@ -33,7 +31,6 @@ function setup() {
     ACCOUNT_ID: randomUUID(),
     DATABASE_URL: "postgresql://test.invalid/test",
   };
-  mocks.settings.mockResolvedValue({ netTransfer: "150" });
   mocks.ledger.mockResolvedValue(undefined);
   mocks.spot.mockImplementation(async () => ({
     balances: [{ asset: "USDT", free: "850", locked: "0" }],
@@ -47,6 +44,10 @@ function setup() {
     ordersComplete: true,
   }));
   mocks.futures.mockResolvedValue({
+    account: { equity: "166", walletBalance: "156", availableBalance: "56", initialMargin: "110" },
+    positionsComplete: true,
+    trades: [],
+    tradesComplete: true,
     positions: [
       {
         symbol: "NEWUSDT",
@@ -99,72 +100,79 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("spot and futures dashboard", () => {
-  it("adds transfer and futures holding PnL once, excluding position notional, and snapshots the same total", async () => {
+  it("adds only exchange wallet equities, including fees and funding already settled in the wallet", async () => {
     const c = setup();
     const d = await dashboard(c, true);
     expect(d.summary).toMatchObject({
-      equity: "1012",
-      futuresEquity: "162",
-      futuresNetTransfer: "150",
+      equity: "1016",
+      equitySource: "exchange",
+      equityComplete: true,
+      futuresEquity: "166",
       cash: "850",
       realizedPnl: "4",
       unrealizedPnl: "12",
       feePnl: "-1",
-      futuresFundingPnl: "2",
     });
-    expect(d.holdings).toHaveLength(2);
-    expect(d.holdings[1]).toMatchObject({ instrument: "futures", asset: "NEW" });
-    expect(d.holdings[1].allocation).toBeCloseTo((110 / 1012) * 100);
-    expect(mocks.snapshot.mock.calls[0][1].equity).toBe("1012");
-    expect(mocks.save.mock.calls[0][1].futures.incomes).toHaveLength(3);
-    mocks.settings.mockResolvedValue({ netTransfer: "100" });
-    expect((await dashboard(c)).summary.equity).toBe("962");
+    expect(d.summary).not.toHaveProperty("futuresNetTransfer");
+    expect(d.holdings[1]).toMatchObject({ asset: "NEW", averageCost: "50", unrealizedPnl: "12" });
+    expect(d.holdings[1].allocation).toBeCloseTo((110 / 1016) * 100);
+    expect(mocks.snapshot.mock.calls[0][1].equity).toBe("1016");
   });
-  it("marks equity incomplete on a futures outage and never saves the incomplete subtotal", async () => {
+  it("shows exchange floating PnL without manual cost even when income has not loaded", async () => {
     const c = setup();
-    mocks.futures.mockRejectedValueOnce(new Error("no access"));
+    const future = await mocks.futures();
+    future.complete = false;
+    future.ledger.incomes = [];
+    mocks.futures.mockResolvedValue(future);
     const d = await dashboard(c, true);
     expect(d.summary).toMatchObject({
-      equity: "1000",
-      equityComplete: false,
-      realizedPnl: null,
-      unrealizedPnl: null,
-      realizedPnlComplete: false,
+      equity: "1016",
+      equityComplete: true,
+      unrealizedPnl: "10",
+      holdingPnlComplete: false,
     });
-    expect(d.connection.futuresComplete).toBe(false);
-    expect(mocks.snapshot).not.toHaveBeenCalled();
-    expect(d.warnings.join()).toContain("合约账户暂未读取成功");
+    expect(d.holdings[1]).toMatchObject({
+      unrealizedPnl: "10",
+      averageCost: "50",
+      pnlComplete: false,
+      fundingPnl: null,
+    });
+    expect(mocks.snapshot).toHaveBeenCalledOnce();
   });
-  it("does not call futures for unset transfers, but explicit zero keeps monitoring enabled", async () => {
+  it("never fabricates missing futures equity or records a spot-only snapshot as the total", async () => {
     const c = setup();
-    mocks.settings.mockResolvedValue({ netTransfer: null });
-    expect((await dashboard(c)).summary.equity).toBe("850");
-    expect(mocks.futures).not.toHaveBeenCalled();
-    mocks.settings.mockResolvedValue({ netTransfer: "0" });
-    const d = await dashboard(c);
-    expect(d.summary).toMatchObject({ equity: "862", realizedPnl: "4" });
-    expect(mocks.futures).toHaveBeenCalledOnce();
+    mocks.futures.mockRejectedValueOnce(new Error("denied"));
+    const d = await dashboard(c, true);
+    expect(d.summary).toMatchObject({ equity: "850", equityComplete: false, futuresEquity: null });
+    expect(mocks.snapshot).not.toHaveBeenCalled();
   });
-  it.each([
-    ["0", "0", "1000"],
-    ["10", "-2", "1008"],
-    ["-10", "2", "992"],
-    ["-10", "-2", "988"],
-  ])(
-    "adds signed unrealized %s and funding %s to reach equity %s",
-    async (pnl, funding, expected) => {
-      const c = setup();
-      const future = await mocks.futures();
-      future.positions[0].unRealizedProfit = pnl;
-      future.ledger.incomes.find(
-        (i: { incomeType: string }) => i.incomeType === "FUNDING_FEE",
-      ).income = funding;
-      mocks.futures.mockResolvedValue(future);
-      const d = await dashboard(c);
-      expect(d.summary.equity).toBe(expected);
-    },
-  );
-  it("does not add spot PnL a second time when the exchange total already includes it", async () => {
+  it("keeps futures trade details separate from spot with identical IDs and sorts both by time", async () => {
+    const c = setup();
+    const spot = await mocks.spot();
+    const future = await mocks.futures();
+    const trade = {
+      id: "42",
+      symbol: "NEWUSDT",
+      side: "BUY",
+      price: "50",
+      quantity: "1",
+      quoteQuantity: "50",
+      fee: "0.01",
+      feeAsset: "USDT",
+      time: 1,
+      isMaker: true,
+    };
+    spot.trades = [trade];
+    future.trades = [{ ...trade, instrument: "futures", time: 2 }];
+    mocks.spot.mockResolvedValue(spot);
+    mocks.futures.mockResolvedValue(future);
+    const d = await dashboard(c);
+    expect(d.trades).toHaveLength(2);
+    expect(d.trades[0].instrument).toBe("futures");
+    expect(d.trades[1].instrument).toBeUndefined();
+    expect(d.summary.tradeCount).toBe(2);
+  });
+  it("does not add either wallet's floating profit to exchange equity again", async () => {
     const c = setup();
     const spot = await mocks.spot();
     spot.balances = [
@@ -174,21 +182,11 @@ describe("spot and futures dashboard", () => {
     spot.tickers = [{ symbol: "BTCUSDT", lastPrice: "110", priceChangePercent: "0" }];
     mocks.spot.mockResolvedValue(spot);
     const d = await dashboard(c);
-    expect(d.summary).toMatchObject({ equity: "1012", unrealizedPnl: "22" });
+    expect(d.summary).toMatchObject({ equity: "1016", unrealizedPnl: "22" });
   });
-  it("does not snapshot provisional equity while funding history is incomplete", async () => {
+  it("queries futures automatically without any legacy transfer settings", async () => {
     const c = setup();
-    const future = await mocks.futures();
-    future.complete = false;
-    mocks.futures.mockResolvedValue(future);
-    const d = await dashboard(c, true);
-    expect(d.summary).toMatchObject({ equity: "1012", equityComplete: false });
-    expect(mocks.snapshot).not.toHaveBeenCalled();
-  });
-  it("does not return a misleading total if configured transfer cannot be read", async () => {
-    const c = setup();
-    mocks.settings.mockRejectedValueOnce(new Error("database unavailable"));
-    await expect(dashboard(c)).rejects.toThrow("database unavailable");
-    expect(mocks.spot).not.toHaveBeenCalled();
+    await dashboard(c);
+    expect(mocks.futures).toHaveBeenCalledOnce();
   });
 });

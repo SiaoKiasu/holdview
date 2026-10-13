@@ -57,7 +57,7 @@ npm run admin:setup
 
 管理员登录后先在「管理账户」选择朋友账户，再点击「成本管理」，填写各币平均单位成本（USDT / 枚）并保存。同一绑定账户的所有用户共享这套成本。0 表示明确零成本，留空清除设置，USDT 基准固定为 1。后续买入不会改变手工成本。
 
-- **Equity**：优先读取 `GET /sapi/v1/asset/wallet/balance?quoteAsset=USDT` 返回的 `walletName=Spot` 的 `balance`，不汇总合约、资金或其他钱包。接口不可用或使用测试网时，才退回现货余额（可用 + 冻结）× 行情估算；仅回退估算时在数值旁标注「估算」。手工成本不影响 Equity，净值快照也使用同一取值规则。
+- **Equity**：优先读取 `GET /sapi/v1/asset/wallet/balance?quoteAsset=USDT` 返回的 `walletName=Spot` 的 `balance`，再加合约接口的 USDT 权益，不汇总资金或其他钱包。接口不可用或使用测试网时，才退回现货余额（可用 + 冻结）× 行情估算；仅回退估算时在数值旁标注「估算」。手工成本不影响 Equity，净值快照也使用同一取值规则。
 - **未实现盈亏**：非稳定币持仓数量 ×（最新价格 − 管理员单位成本）。手工成本保存后即可计算，不等待成交回溯；缺任一非稳定币持仓成本或行情时总额为未知。USDT、USDC、FDUSD、DAI、TUSD、USDP 的持仓浮盈显示「—」，不计入未实现盈亏汇总，但仍按实际行情计入总资产估值。
 - **已实现盈亏**：成交记录的平仓收益减全部已经发生的买卖手续费。买入手续费发生时立即扣除，不等待卖出；后续卖出按不含已扣费用的历史买入成本移动加权平均匹配，避免重复扣费。只有买入、没有卖出时，已实现盈亏就是负的买入手续费。手工持仓成本变更不影响已实现盈亏。买入扣本币手续费时，按成交均价折算费用并从历史库存成本中剔除；卖出扣本币时释放额外支付数量的历史成本。
 - **现金**：仅 USDT 可用 + 冻结余额，并分别展示。不受成本设置影响。
@@ -73,7 +73,7 @@ BNB 等第三币手续费使用成交所在分钟的 `ASSETUSDT` 历史 K 线收
 
 报价为 USDT；其他稳定币按市场价格估值。未知行情资产保留在列表、不计入持仓明细小计；有官方 Equity 时仍可记录净值，只有本地估值不完整时才暂停快照。明细行情与官方估值的时间和口径可能不同，明细合计不保证与 Equity 完全一致；资产占比按已估值持仓明细合计计算。历史快照不会追溯改写。24h 涨跌和净值曲线不等同于资金流调整后的收益率。
 
-接口依据：[Binance 账户与成交文档](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/account)、[钱包估值文档](https://developers.binance.com/en/docs/catalog/core-trading-wallet/api/rest-api/asset#query-user-wallet-balance)。现货公开账户/钱包接口没有对应的未实现盈亏字段，按管理员成本计算；合约或统一保证金账户的盈亏字段不用于本项目现货口径。
+接口依据：[Binance 账户与成交文档](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/account)、[钱包估值文档](https://developers.binance.com/en/docs/catalog/core-trading-wallet/api/rest-api/asset#query-user-wallet-balance)。现货公开账户/钱包接口没有对应的未实现盈亏字段，按管理员成本计算；合约仓位使用合约接口返回的开仓价与未实现盈亏；统一保证金账户暂不支持。
 
 ## 开发与接口
 
@@ -93,15 +93,16 @@ npm start
 
 ## 合约持仓合并展示
 
-管理员在账户页顶部的「合约账户管理」维护累计净划入 USDT（累计划入减累计划出）。留空不接入，明确填写 0 仍接入。设置只保存统计值，不调用划转接口。普通用户看不到管理入口，也无法读取或修改设置接口。配置按账户和 API Key 隔离，保存在 Neon 的 `slzb_futures_settings`；本地无数据库时保存于私有 `.slzb/futures-settings`，支持版本冲突检查和修改审计。
+真实账户自动复用所选账户 API 读取 Binance USDⓈ-M USDT 保证金合约，无需填写划转值或手工合约成本。旧划转配置不再参与计算，管理入口及 `/api/futures` 设置接口已移除；保留历史数据库记录，不执行删除迁移。
 
-复用所选账户已有 API，读取 Binance USDⓈ-M USDT 保证金合约：`GET /fapi/v3/positionRisk` 获取开仓价、标记价格、数量和未实现盈亏；`GET /fapi/v1/income` 获取已实现收益、交易手续费和资金费。代码仅发 GET，不交易、不实际划转。账户 API 必须允许这些只读查询；测试网使用独立的 `demo-fapi.binance.com`，不会把测试网密钥发送至主网。币本位、组合保证金以及非 USDT 保证金持仓暂不按 USDT 汇总，遇到不支持的持仓会明确提示。
+只读取 `GET /fapi/v3/account`（账户权益）、`GET /fapi/v3/positionRisk`（仓位、开仓价、标记价格、未实现盈亏）、`GET /fapi/v1/income`（资金流水）、`GET /fapi/v1/userTrades`（逐笔成交）。不交易、不实际划转。API 须允许这些查询；测试网密钥只发往 `demo-fapi.binance.com`。币本位、组合保证金与非 USDT 保证金持仓暂不支持。
 
-- **总资产（用户指定口径）**＝现货总资产＋管理员填写的累计净划入＋合约浮盈浮亏＋累计资金费净收入。现货优先用交易所现货钱包估值，其自身浮盈已包含在内，不再加一次。合约名义仓位金额不计入总资产；合约平仓收益及交易手续费仍单独展示在已实现盈亏，不额外加入此自定义总资产公式。缺失合约盈亏或资金费时标记小计，暂停保存净值快照。
-- **已实现盈亏**＝现货已实现盈亏＋合约 `REALIZED_PNL`＋带符号的 `COMMISSION`；合约佣金通常为负，资金费不计入此项。
-- **持仓盈亏**＝现货持仓盈亏＋合约接口未实现盈亏＋带符号的累计 `FUNDING_FEE`；合约收益率为该盈亏除以当前持仓的开仓名义成本，不使用杠杆保证金收益率。
-- **持仓列表**把现货和合约分行显示，合约标注方向。合约资产估值栏为名义价值，占比为对总资产的敞口，不能再次累加到总资产。资产分布图用合约划转值加合约持仓盈亏作为独立部分，避免把杠杆名义仓位当作实际资产。现金栏仍为现货 USDT。
-- 同一合约的双向持仓合并为一行，数量和成本按绝对数量加权，盈亏使用交易所多空盈亏之和，资金费只加一次。已平仓合约有累计资金费时保留一行；重新开仓后同一标的仍使用累计资金费，不限于本次开仓。
-- 首次读取最近 89 天可获取的流水，后续持续保存并增量同步；历史接口仅保留最近三个月，不能宣称覆盖账户全部历史。流水按类型＋交易 ID 去重，近期数据优先于历史回填，缺失汇率或读取失败不会假设为零。第三币手续费按对应合约分钟收盘价近似折算 USDT。历史缺口、未支持的保证金币种及同步暂计状态会在页面提示。
+- **总资产**＝现货钱包 Equity＋合约账户 USDT `marginBalance`。合约权益已经包含浮盈、已入账手续费、资金费及平仓收益，不再加仓位名义金额或任何盈亏。缺失合约权益时显示已知现货小计，并暂停净值快照；历史流水未同步不影响官方权益和快照。
+- **已实现盈亏**＝现货已实现盈亏＋合约 `REALIZED_PNL`＋带符号的 `COMMISSION`；买卖手续费各自在发生时扣除，资金费不计入此项。首次流水未读到时可用已读取成交的平仓收益减手续费暂计，不与流水重复相加。
+- **持仓盈亏**＝现货持仓盈亏＋合约未实现盈亏＋累计 `FUNDING_FEE`（收取为正、支付为负）。流水未齐时仍显示接口浮盈加已知资金费，并标注暂计。合约收益率按开仓名义成本计算，不使用杠杆保证金收益率。
+- **持仓列表**统一展示数量、成本、标记价格、估值、盈亏及收益率。合约成本使用接口开仓均价，保留合约及方向标记。合约估值为数量×标记价格，仅展示仓位，不能再次累加到 Equity。资产分布使用合约实际权益作为独立部分；现金栏仍为现货 USDT。
+- **交易记录**合并现货与合约逐笔成交，按时间倒序，合约记录标记来源，CSV 导出包含市场。ID 按市场＋交易对＋成交 ID 区分。近期成交优先读取，历史成交使用 ID 游标回补并持久保存。
+- 同一合约双向持仓合并一行，数量和成本按绝对数量加权，盈亏使用多空盈亏之和，资金费只加一次。已平仓合约有累计资金费时保留一行；重新开仓仍使用该标的累计资金费。
+- 初次读取最近 89 天流水，交易所历史接口仅保留约三个月；后续增量同步并持久保存，不能宣称覆盖账户全部历史。流水按类型＋交易 ID 去重，保留 64 位 ID 精度。第三币手续费按事件分钟行情近似折算；读取失败、历史缺口或缺失汇率会提示，不视作确定的零。
 
-接口文档：[持仓 V3](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Position-Information-V3)、[资金流水](https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Get-Income-History)。
+接口文档：[账户 V3](https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Account-Information-V3)、[持仓 V3](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Position-Information-V3)、[资金流水](https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Get-Income-History)、[成交](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Account-Trade-List)。

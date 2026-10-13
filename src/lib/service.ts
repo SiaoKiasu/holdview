@@ -10,7 +10,6 @@ import { readHistory, saveSnapshot } from "./storage";
 import type { Dashboard, ProviderData } from "./types";
 import { tradeRealizedPnl } from "./trade-pnl";
 import { readCosts } from "./cost-store";
-import { readFuturesSettings } from "./futures-store";
 import { futuresAccounting } from "./futures-pnl";
 import { readLedger, saveLedger } from "./ledger-store";
 type Cached = { data: ProviderData; time: number };
@@ -83,8 +82,7 @@ async function provider(c: Config, futuresEnabled = false): Promise<Cached> {
 }
 export async function dashboard(c: Config, persist = false): Promise<Dashboard> {
   const demo = c.DATA_SOURCE === "demo";
-  const netTransfer = demo ? null : (await readFuturesSettings(c)).netTransfer;
-  const futuresEnabled = netTransfer !== null;
+  const futuresEnabled = !demo;
   const { data, time } = await provider(c, futuresEnabled);
   const futures = futuresAccounting(futuresEnabled ? data.futures : undefined);
   let costs: Record<string, string> = {};
@@ -99,19 +97,13 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
   const sum = (values: (string | null)[]) =>
     values.reduce<Decimal>((a, v) => a.plus(v ?? 0), new Decimal(0)).toString();
   const spotValuation = resolveEquity(spotHoldings, data.spotEquity);
-  // Spot equity already includes spot price PnL. Add only the futures transfer base
-  // and futures holding PnL (exchange unrealized + signed funding), each exactly once.
-  // Futures notional and exchange wallet equity must not be added as assets again.
-  const futuresEquity = futuresEnabled
-    ? new Decimal(netTransfer!).plus(futures.holdingPnl ?? 0).toString()
-    : null;
+  // Exchange marginBalance already includes unrealized PnL, settled funding, fees and
+  // realized gains. Add the two wallets once; never add their holdings/PnL again.
+  const futuresEquity = futuresEnabled ? (data.futures?.account?.equity ?? null) : null;
   const valuation = {
     ...spotValuation,
     equity: new Decimal(spotValuation.equity).plus(futuresEquity ?? 0).toString(),
-    equitySource: futuresEnabled ? ("calculated" as const) : spotValuation.equitySource,
-    equityComplete:
-      spotValuation.equityComplete &&
-      (!futuresEnabled || (futures.holdingPnl !== null && futures.complete)),
+    equityComplete: spotValuation.equityComplete && (!futuresEnabled || futuresEquity !== null),
   };
   const holdings = [...spotHoldings, ...(futuresEnabled ? futures.holdings : [])].map((h) => ({
     ...h,
@@ -127,8 +119,8 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
   const costed = nonStableHoldings.filter((h) => h.unrealizedPnl !== null);
   const cash = spotHoldings.find((h) => h.asset === "USDT");
   const warnings = [...data.warnings, ...(futuresEnabled ? futures.warnings : [])];
-  if (futuresEnabled && !valuation.equityComplete && spotValuation.equityComplete)
-    warnings.push("合约盈亏或资金费尚未完整读取，总资产暂为已知部分小计，暂不写入资产走势。");
+  if (futuresEnabled && futuresEquity === null)
+    warnings.push("合约账户权益暂未读取，总资产仅显示现货部分，暂不写入资产走势。");
   const combine = (spot: string | null, contract: string | null) =>
     spot === null || (futuresEnabled && contract === null)
       ? null
@@ -181,6 +173,9 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
     warnings.push(
       "BNB 等第三币手续费按成交所在分钟的历史收盘价折算 USDT，属于近似折算，不使用当前行情或手工成本。",
     );
+  const combinedTrades = [...data.trades, ...(data.futures?.trades ?? [])].sort(
+    (a, b) => b.time - a.time,
+  );
   return {
     source: c.DATA_SOURCE,
     accountLabel: c.ACCOUNT_LABEL,
@@ -191,7 +186,7 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
         : "Binance Spot",
     updatedAt: time,
     holdings,
-    trades: data.trades.slice(0, 1000),
+    trades: combinedTrades.slice(0, 1000),
     orders: data.orders,
     history,
     summary: {
@@ -200,12 +195,13 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
       unpricedAssets: unpriced,
       ...(futuresEnabled
         ? {
-            futuresNetTransfer: netTransfer!,
-            futuresEquity: futuresEquity!,
+            futuresEquity,
             futuresFundingPnl: futures.fundingPnl,
           }
         : {}),
       unrealizedPnl: holdingPnl,
+      holdingPnlComplete:
+        !futuresEnabled || (data.futures?.complete === true && futures.fundingPnl !== null),
       realizedPnl,
       realizedPnlComplete,
       feePnl: combine(accounting.feePnl, futures.feePnl),
@@ -239,15 +235,16 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
       stablecoinValue: sum(
         spotHoldings.filter((h) => STABLECOINS.has(h.asset)).map((h) => h.value),
       ),
-      tradeCount: data.trades.length,
+      tradeCount: combinedTrades.length,
     },
     connection: {
       futuresEnabled,
       futuresComplete: !futuresEnabled || futures.complete,
+      futuresTradesComplete: !futuresEnabled || data.futures?.tradesComplete === true,
       futuresHistoryStart: data.futures?.ledger.startTime ?? null,
       database: Boolean(c.DATABASE_URL),
       snapshotsSaved: saved,
-      symbols: [...new Set(data.trades.map((t) => t.symbol))],
+      symbols: [...new Set(combinedTrades.map((t) => t.symbol))],
       historySync: data.historySync ?? { scanned: 0, total: 0, oldestCheck: null },
       tradesComplete: data.tradesComplete,
       ordersComplete: data.ordersComplete,

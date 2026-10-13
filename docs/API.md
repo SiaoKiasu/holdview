@@ -33,6 +33,14 @@ Base URL 为本地 `http://localhost:3000` 或部署域名。所有账户接口�
 
 聚合 `/api/dashboard` 和 `/api/sync` 直接返回 Dashboard。其他账户数据端点通常返回 `{ data, updatedAt, warnings }`。会话成功返回 `{ authenticated: true, demo, user: { username, displayName, role }, accountLabel }`。只有未配置自建用户的内置 Demo 才返回 `demo: true` 以显示演示登录提示。
 
+## 合约聚合
+
+真实账户自动读取 USDT 保证金合约。`summary.equity` 为现货权益加 `summary.futuresEquity`（合约 USDT marginBalance）。合约权益已含浮盈和已入账费用，不再加划转值、名义仓位或盈亏；合约权益为 null 时总额为现货小计且 `equityComplete=false`。流水缺失不影响已成功读取的官方权益。
+
+合约持仓返回 `instrument=futures`、`symbol`、`direction`、交易所开仓 `averageCost`、标记价格 `price`、未实现盈亏加已知资金费的 `unrealizedPnl`。`pnlComplete=false` 表示资金费尚未完整同步，仍显示已知浮盈；`summary.holdingPnlComplete` 为聚合对应标志。合约成本不在手工成本管理范围。已移除 `/api/futures` 手填划转接口。
+
+`/api/trades` 默认混合现货和合约；`market=spot|futures` 可筛选最近 1,000 笔中的市场。指定 symbol 时默认现货，用 `/api/trades?market=futures&symbol=PONSUSDT&fromId=0&limit=1000` 查询合约逐笔分页。合约记录有 `instrument=futures` 和 `realizedPnl`（该笔交易所平仓收益，不含 fee）；唯一键需含市场、symbol、id。`connection.futuresTradesComplete` 为已发现合约成交同步状态；合约成交接口最多回溯约三个月，不传 fromId 时读取最近七天。
+
 ## 成交分页与完整性
 
 `symbol` 为 5–30 位大写字母/数字，由交易所验证是否存在；查询始终使用当前登录用户绑定账户的密钥，无需配置监控列表。`limit` 为 1–1000，`fromId` 为非负整数 ID；传 limit/fromId 时必须同时传 symbol。
@@ -62,7 +70,7 @@ Base URL 为本地 `http://localhost:3000` 或部署域名。所有账户接口�
 
 `connection.tradesComplete` 表示当前已发现交易对都完成首次分页回溯，且本轮无成交查询失败；不是所有历史操作均已覆盖的保证。`connection.historySync` 返回 `{ scanned, total, oldestCheck }`，时间为毫秒或 null；`connection.symbols` 为已发现有成交的交易对。不同交易对轮转增量查询，最早检查时间表达查询范围的时效性。`ordersComplete=false` 时空列表不是“没有挂单”。
 
-`summary` 新增 `realizedPnl`、`principal`（可为 null），`cash`、`cashFree`、`cashLocked`（十进制字符串，USDT）。`cash` 包含冻结 USDT，不含其他稳定币。`equity` 优先使用 Binance 钱包接口（`quoteAsset=USDT`）返回的 Spot `balance`，失败或测试网才本地估算；`equitySource` 为 `exchange` / `calculated`，`equityComplete` 表示总额是否完整。官方估值不依赖本地逐币行情完整性，实时与 Cron 快照都使用同一规则。`unrealizedPnl` 仅汇总非稳定币；其成本或行情缺失时为 null，稳定币持仓浮盈为 null。金额 null 表示未知；持仓表成本完全由管理员输入。持仓浮盈亏立即按管理员成本计算，不等待历史扫描。已实现盈亏按成交记录移动加权平均匹配历史买入；买卖手续费发生时立即扣除，后续卖出不再重复计入已扣费用。第三币手续费按成交分钟历史收盘价近似折算，汇率随账本持久化。`feePnl` 为已读取成交手续费折算 USDT 后的负值；`realizedPnlComplete` 表示首次回溯是否完成且已读取成交能完整核算。同步中可返回暂计 `realizedPnl`，须结合该标志和 `realizedPnlNote` 展示。历史买入不足、缺手续费汇率、存在非 USDT 成交或扫描中尚无成交时为 null。仅买入未卖出时已实现盈亏等于负的买入手续费。下架未发现交易对、闪兑和资金流水不在范围内。
+`summary` 新增 `realizedPnl`、`principal`（可为 null），`cash`、`cashFree`、`cashLocked`（十进制字符串，USDT）。`cash` 包含冻结 USDT，不含其他稳定币。`equity` 优先使用 Binance 钱包接口（`quoteAsset=USDT`）返回的 Spot `balance` 加合约权益；现货接口失败或测试网才本地估算现货部分；`equitySource` 为 `exchange` / `calculated`，`equityComplete` 表示总额是否完整。官方估值不依赖本地逐币行情完整性，实时与 Cron 快照都使用同一规则。`unrealizedPnl` 仅汇总非稳定币；其成本或行情缺失时为 null，稳定币持仓浮盈为 null。金额 null 表示未知；持仓表成本完全由管理员输入。持仓浮盈亏立即按管理员成本计算，不等待历史扫描。已实现盈亏按成交记录移动加权平均匹配历史买入；买卖手续费发生时立即扣除，后续卖出不再重复计入已扣费用。第三币手续费按成交分钟历史收盘价近似折算，汇率随账本持久化。`feePnl` 为已读取成交手续费折算 USDT 后的负值；`realizedPnlComplete` 表示首次回溯是否完成且已读取成交能完整核算。同步中可返回暂计 `realizedPnl`，须结合该标志和 `realizedPnlNote` 展示。历史买入不足、缺手续费汇率、存在非 USDT 成交或扫描中尚无成交时为 null。仅买入未卖出时已实现盈亏等于负的买入手续费。下架未发现交易对、闪兑和资金流水不在范围内。
 
 ## 管理员成本接口
 

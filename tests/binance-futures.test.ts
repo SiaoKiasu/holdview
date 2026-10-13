@@ -36,7 +36,22 @@ function transport(handler: (u: URL) => unknown) {
         ? { serverTime: Date.now() }
         : u.pathname === "/fapi/v3/positionRisk"
           ? [pos]
-          : handler(u),
+          : u.pathname === "/fapi/v3/account"
+            ? {
+                totalMarginBalance: "160",
+                assets: [
+                  {
+                    asset: "USDT",
+                    marginBalance: "160",
+                    walletBalance: "150",
+                    availableBalance: "50",
+                    initialMargin: "110",
+                  },
+                ],
+              }
+            : u.pathname === "/fapi/v1/userTrades"
+              ? []
+              : handler(u),
     );
   });
 }
@@ -45,6 +60,7 @@ describe("read-only futures adapter", () => {
     const t = transport(() => [income(1), income(1, "FUNDING_FEE")]);
     const result = await new BinanceFuturesClient(config, t as typeof fetch).loadFutures();
     expect(result.positions[0].entryPrice).toBe("50");
+    expect(result.account?.equity).toBe("160");
     expect(result.ledger.incomes).toHaveLength(2);
     expect(result.complete).toBe(true);
     expect(t.mock.calls.every(([u]) => new URL(String(u)).host === "fapi.binance.com")).toBe(true);
@@ -100,10 +116,113 @@ describe("read-only futures adapter", () => {
     expect(result.ledger.incomes).toHaveLength(1);
     expect(result.warnings.length).toBeGreaterThan(0);
   });
-  it("refuses malformed positions and unsafe transaction IDs", async () => {
-    const t = transport(() => [{ ...income(1), tranId: Number.MAX_SAFE_INTEGER + 1 }]);
-    const result = await new BinanceFuturesClient(config, t as typeof fetch).loadFutures();
+  it("preserves 64-bit transaction IDs exactly without rejecting or merging adjacent IDs", async () => {
+    const t = transport(() => []);
+    const raw = `[${JSON.stringify(income(1)).replace('"tranId":1', '"tranId":9007199254740992')},${JSON.stringify(income(1)).replace('"tranId":1', '"tranId":9007199254740993')}]`;
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) =>
+      new URL(String(url)).pathname === "/fapi/v1/income"
+        ? new Response(raw)
+        : t(url, init)) as typeof fetch;
+    const result = await new BinanceFuturesClient(config, fetcher).loadFutures();
+    expect(result.complete).toBe(true);
+    expect(result.ledger.incomes.map((i) => i.tranId)).toEqual([
+      "9007199254740992",
+      "9007199254740993",
+    ]);
+  });
+  it("reads recent and historical contract trades and deduplicates by symbol and ID", async () => {
+    const t = transport(() => []);
+    const row = {
+      id: "9007199254740993",
+      symbol: "NEWUSDT",
+      side: "BUY",
+      price: "50",
+      qty: "2",
+      quoteQty: "100",
+      commission: "0.1",
+      commissionAsset: "USDT",
+      time: 1,
+      maker: true,
+      realizedPnl: "0",
+    };
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) =>
+      new URL(String(url)).pathname === "/fapi/v1/userTrades"
+        ? Response.json([row])
+        : t(url, init)) as typeof fetch;
+    const result = await new BinanceFuturesClient(config, fetcher).loadFutures();
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades![0]).toMatchObject({
+      instrument: "futures",
+      id: row.id,
+      quantity: "2",
+      fee: "0.1",
+    });
+    expect(result.tradesComplete).toBe(true);
+  });
+  it("retains exchange equity and new fills when income history fails", async () => {
+    const base = transport(() => {
+      throw new Error("income unavailable");
+    });
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (new URL(String(url)).pathname === "/fapi/v1/userTrades")
+        return Response.json([
+          {
+            id: "71",
+            symbol: "NEWUSDT",
+            side: "BUY",
+            price: "50",
+            qty: "2",
+            quoteQty: "100",
+            commission: "0.1",
+            commissionAsset: "USDT",
+            time: Date.now(),
+            maker: false,
+            realizedPnl: "0",
+          },
+        ]);
+      return base(url, init);
+    }) as typeof fetch;
+    const result = await new BinanceFuturesClient(config, fetcher).loadFutures();
+    expect(result.account?.equity).toBe("160");
+    expect(result.positions[0].unRealizedProfit).toBe("10");
     expect(result.complete).toBe(false);
-    expect(result.ledger.incomes).toEqual([]);
+    expect(result.trades?.[0].id).toBe("71");
+    expect(result.tradesComplete).toBe(true);
+  });
+  it("continues a full same-millisecond trade page with exact ID cursor and keeps recent fills", async () => {
+    const base = transport(() => []);
+    const row = (id: number) => ({
+      id: String(id),
+      symbol: "NEWUSDT",
+      side: "BUY",
+      price: "50",
+      qty: "2",
+      quoteQty: "100",
+      commission: "0.1",
+      commissionAsset: "USDT",
+      time: 1234,
+      maker: false,
+      realizedPnl: "0",
+    });
+    const cursors: string[] = [];
+    const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+      const u = new URL(String(url));
+      if (u.pathname !== "/fapi/v1/userTrades") return base(url, init);
+      expect(u.searchParams.has("startTime")).toBe(false);
+      expect(u.searchParams.has("endTime")).toBe(false);
+      const from = u.searchParams.get("fromId");
+      if (from === null) return Response.json([row(2001)]);
+      cursors.push(from);
+      return Response.json(
+        from === "0" ? Array.from({ length: 1000 }, (_, i) => row(i + 1)) : [row(1001)],
+      );
+    }) as typeof fetch;
+    const first = await new BinanceFuturesClient(config, fetcher).loadFutures();
+    expect(first.tradesComplete).toBe(false);
+    expect(first.trades).toHaveLength(1001);
+    const second = await new BinanceFuturesClient(config, fetcher).loadFutures(first.ledger);
+    expect(cursors).toEqual(["0", "1001"]);
+    expect(second.trades).toHaveLength(1002);
+    expect(second.tradesComplete).toBe(true);
   });
 });

@@ -1,3 +1,21 @@
+vi.mock("@/lib/binance-futures", () => ({
+  BinanceFuturesClient: class {
+    async loadFutures() {
+      return {
+        account: { equity: "0", walletBalance: "0", availableBalance: "0", initialMargin: "0" },
+        positions: [],
+        positionsComplete: true,
+        trades: [],
+        tradesComplete: true,
+        ledger: { incomes: [], feeRates: {}, startTime: 0, syncedThrough: Date.now() },
+        complete: true,
+        warnings: [],
+      };
+    }
+  },
+  incomeRateKey: (i: { asset: string; time: number }) =>
+    `${i.asset}:${Math.floor(i.time / 60000) * 60000}`,
+}));
 import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ save: vi.fn(), equities: new Map<string, string>() }));
 vi.mock("@/lib/storage", () => ({ saveSnapshot: mocks.save }));

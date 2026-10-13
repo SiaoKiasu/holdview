@@ -108,8 +108,13 @@ describe("contract PnL separated from transfer valuation", () => {
     d.ledger.incomes = [];
     expect(futuresAccounting(d)).toMatchObject({
       realizedPnl: null,
-      holdingPnl: null,
+      holdingPnl: "10",
       complete: false,
+    });
+    expect(futuresAccounting(d).holdings[0]).toMatchObject({
+      unrealizedPnl: "10",
+      fundingPnl: null,
+      pnlComplete: false,
     });
     d.complete = true;
     d.positions[0].marginAsset = "USDC";

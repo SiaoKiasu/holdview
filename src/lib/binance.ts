@@ -79,7 +79,14 @@ export class BinanceClient {
       throw new AppError("EXCHANGE_RATE_LIMIT", "交易所请求过于频繁，请暂停刷新，稍后重试。", 429);
     let data: unknown;
     try {
-      data = await response.json();
+      data =
+        this.market === "futures"
+          ? JSON.parse(await response.text(), (key, value, context?: { source: string }) =>
+              ["id", "orderId", "tranId"].includes(key) && typeof value === "number"
+                ? (context?.source ?? String(value))
+                : value,
+            )
+          : await response.json();
     } catch {
       throw new AppError("EXCHANGE_RESPONSE", "交易所返回了无法解析的响应。", 502);
     }

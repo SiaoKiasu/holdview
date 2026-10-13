@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS linden_directory (
   ciphertext TEXT NOT NULL
 );
 
--- Per-account administrator-defined futures net transfers; APIs never move funds.
+-- Legacy manual futures transfer settings, retained for audit only; no longer read by the app.
 CREATE TABLE IF NOT EXISTS slzb_futures_settings (
   account_id TEXT PRIMARY KEY,
   revision TEXT NOT NULL,

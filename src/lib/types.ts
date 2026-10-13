@@ -2,6 +2,8 @@ export type Source = "demo" | "binance";
 export type Balance = { asset: string; free: string; locked: string };
 export type Ticker = { symbol: string; lastPrice: string; priceChangePercent: string };
 export type Trade = {
+  instrument?: "futures";
+  realizedPnl?: string;
   id: string;
   symbol: string;
   side: "BUY" | "SELL";
@@ -29,6 +31,7 @@ export type Holding = Balance & {
   symbol?: string;
   direction?: "多" | "空" | "双向" | "已平仓";
   fundingPnl?: string | null;
+  pnlComplete?: boolean;
   returnRate?: string | null;
   quantity: string;
   price: string | null;
@@ -78,8 +81,8 @@ export type Dashboard = {
   orders: Order[];
   history: Snapshot[];
   summary: {
-    futuresNetTransfer?: string;
-    futuresEquity?: string;
+    futuresEquity?: string | null;
+    holdingPnlComplete?: boolean;
     futuresFundingPnl?: string | null;
     equity: string;
     equitySource: "exchange" | "calculated";
@@ -106,6 +109,7 @@ export type Dashboard = {
   connection: {
     futuresEnabled?: boolean;
     futuresComplete?: boolean;
+    futuresTradesComplete?: boolean;
     futuresHistoryStart?: number | null;
     historySync: HistorySync;
     database: boolean;
@@ -118,6 +122,7 @@ export type Dashboard = {
 };
 
 export type FuturesIncome = {
+  tradeId?: string;
   tranId: string;
   symbol: string;
   incomeType: string;
@@ -135,6 +140,11 @@ export type FuturesPosition = {
   marginAsset: string;
 };
 export type FuturesLedger = {
+  trades?: Trade[];
+  tradeSync?: Record<
+    string,
+    { nextId: string; startTime: number; endTime: number; complete: boolean }
+  >;
   incomes: FuturesIncome[];
   startTime: number;
   syncedThrough: number;
@@ -143,6 +153,15 @@ export type FuturesLedger = {
   feeRates: Record<string, string>;
 };
 export type FuturesData = {
+  account?: {
+    equity: string;
+    walletBalance: string;
+    availableBalance: string;
+    initialMargin: string;
+  };
+  positionsComplete?: boolean;
+  trades?: Trade[];
+  tradesComplete?: boolean;
   positions: FuturesPosition[];
   ledger: FuturesLedger;
   complete: boolean;
