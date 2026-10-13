@@ -106,3 +106,13 @@ npm start
 - 初次读取最近 89 天流水，交易所历史接口仅保留约三个月；后续增量同步并持久保存，不能宣称覆盖账户全部历史。流水按类型＋交易 ID 去重，保留 64 位 ID 精度。第三币手续费按事件分钟行情近似折算；读取失败、历史缺口或缺失汇率会提示，不视作确定的零。
 
 接口文档：[账户 V3](https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Account-Information-V3)、[持仓 V3](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Position-Information-V3)、[资金流水](https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Get-Income-History)、[成交](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Account-Trade-List)。
+
+## 平仓复盘
+
+左侧「平仓复盘」按资产与市场汇总所有已同步的平仓成交（不受交易表最近 1,000 笔限制），支持已清仓/部分平仓筛选、搜索、收益排序、逐笔明细和收益对比。剩余估值严格小于 1 USDT 视为已清仓，等于 1 仍为部分平仓；行情未知时不推断清仓。只有买入、未发生平仓的标的不进入复盘。
+
+复盘使用成交历史移动加权成本，不使用当前手工持仓成本。买入手续费按已平数量分摊，卖出手续费在对应平仓扣除；未平仓部分的买入费用不计入复盘净收益，因此该值可以与账户总览立即扣费的已实现盈亏不同。资金费维持原口径计入持仓盈亏，不计入复盘净收益。合约使用交易所逐笔平仓毛收益；开仓费用按平仓数量匹配，反手成交拆分平仓和新开仓，多空双向分别维护库存。
+
+收益率＝平仓净收益 / 已平部分匹配成本；均价按平仓数量加权，持有时间按库存加权开仓时间匹配，再按平仓数量加权。汇总显示累计已平数量、开/平均价、毛收益、手续费、净收益、收益率、平均持有时间、剩余估值和最近平仓。展开显示最近 100 笔明细，汇总仍包含全部已同步记录。缺少买入记录或手续费历史汇率的指标显示未知，不用零成本替代；同步不全时标为暂计。
+
+价格（成本、标记价、成交价、委托价和复盘均价）大于等于 1 时显示两位小数，介于 0 与 1 之间显示四位；极小非零价格用 `<0.0001` 避免显示假零。所有计算保留十进制原始精度。

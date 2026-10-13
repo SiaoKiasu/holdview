@@ -10,6 +10,7 @@ import { readHistory, saveSnapshot } from "./storage";
 import type { Dashboard, ProviderData } from "./types";
 import { tradeRealizedPnl } from "./trade-pnl";
 import { readCosts } from "./cost-store";
+import { closedReview } from "./closed-review";
 import { futuresAccounting } from "./futures-pnl";
 import { readLedger, saveLedger } from "./ledger-store";
 type Cached = { data: ProviderData; time: number };
@@ -173,6 +174,8 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
     warnings.push(
       "BNB 等第三币手续费按成交所在分钟的历史收盘价折算 USDT，属于近似折算，不使用当前行情或手工成本。",
     );
+  const review = closedReview(data, holdings);
+  review.complete &&= !futuresEnabled || data.futures?.tradesComplete === true;
   const combinedTrades = [...data.trades, ...(data.futures?.trades ?? [])].sort(
     (a, b) => b.time - a.time,
   );
@@ -186,6 +189,7 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
         : "Binance Spot",
     updatedAt: time,
     holdings,
+    closedReview: review,
     trades: combinedTrades.slice(0, 1000),
     orders: data.orders,
     history,

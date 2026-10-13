@@ -36,10 +36,12 @@ import {
 import { STABLECOINS } from "@/lib/assets";
 import dynamic from "next/dynamic";
 const AdminPanel = dynamic(() => import("./admin-panel").then((m) => m.AdminPanel));
+import { formatPrice } from "@/lib/price-format";
+import { ClosedReviewPanel } from "./closed-review-panel";
 import { CostEditor } from "./cost-editor";
 import { LindenBrand, LindenMark } from "./brand";
 import type { Dashboard, Holding, Trade } from "@/lib/types";
-type Tab = "overview" | "holdings" | "activity" | "admin";
+type Tab = "overview" | "holdings" | "activity" | "review" | "admin";
 const colors = ["#355b49", "#8da184", "#c5bc92", "#b0c6a8", "#dfdfc6", "#8eaba8"];
 const assetNames: Record<string, string> = {
   BTC: "Bitcoin",
@@ -467,6 +469,7 @@ export function Portal() {
     overview: "账户总览",
     holdings: "资产持仓",
     activity: "交易记录",
+    review: "平仓复盘",
     admin: "管理后台",
   }[tab];
   return (
@@ -482,6 +485,7 @@ export function Portal() {
               { id: "overview", label: "账户总览", icon: LayoutDashboard },
               { id: "holdings", label: "资产持仓", icon: Wallet },
               { id: "activity", label: "交易记录", icon: Activity },
+              { id: "review", label: "平仓复盘", icon: BarChart3 },
             ] as const
           ).map((item) => (
             <button
@@ -929,6 +933,13 @@ export function Portal() {
                       <TradeTable trades={data.trades.slice(0, 4)} hidden={hidden} />
                     </section>
                   )}
+                  {tab === "review" && (
+                    <ClosedReviewPanel
+                      key={selectedAccount}
+                      review={data.closedReview}
+                      hidden={hidden}
+                    />
+                  )}
                   {tab === "activity" && (
                     <>
                       <div className="activity-summary">
@@ -1052,7 +1063,9 @@ export function Portal() {
                                     </span>{" "}
                                     · {o.type}
                                   </td>
-                                  <td className="numeric">{money(o.price)}</td>
+                                  <td className="numeric">
+                                    {hidden ? "••••" : formatPrice(o.price)}
+                                  </td>
                                   <td className="numeric">
                                     {hidden ? "••••" : number(o.quantity, 8)}
                                   </td>
@@ -1174,11 +1187,7 @@ function HoldingTable({
                     <Coin asset={h.asset} index={i} />
                     <div>
                       <strong>{h.asset}</strong>
-                      <small>
-                        {h.instrument === "futures"
-                          ? `合约 · ${h.direction}`
-                          : (assetNames[h.asset] ?? h.asset)}
-                      </small>
+                      <small>{assetNames[h.asset] ?? h.asset}</small>
                     </div>
                   </div>
                 </td>
@@ -1189,11 +1198,11 @@ function HoldingTable({
                   )}
                 </td>
                 <td className="numeric">
-                  <strong>{money(h.averageCost)}</strong>
+                  <strong>{hidden ? "••••" : formatPrice(h.averageCost)}</strong>
                   {h.averageCost === null && h.instrument !== "futures" && <small>未设置</small>}
                 </td>
                 <td className="numeric">
-                  <strong>{money(h.price)}</strong>
+                  <strong>{hidden ? "••••" : formatPrice(h.price)}</strong>
                   {h.price === null && h.direction !== "已平仓" && <small>暂无行情</small>}
                 </td>
                 <td className="numeric">
@@ -1274,7 +1283,7 @@ function TradeTable({ trades, hidden }: { trades: Trade[]; hidden: boolean }) {
                   {t.side === "BUY" ? "买入" : "卖出"}
                 </span>
               </td>
-              <td className="numeric">{hidden ? "••••" : number(t.price, 8)}</td>
+              <td className="numeric">{hidden ? "••••" : formatPrice(t.price)}</td>
               <td className="numeric">{hidden ? "••••" : number(t.quantity, 8)}</td>
               <td className="numeric">{hidden ? "••••" : number(t.quoteQuantity, 8)}</td>
               <td className="numeric">

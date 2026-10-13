@@ -110,3 +110,9 @@ GET/POST `/api/session` 均返回默认 `accountId`。管理员额外获得 `acc
 - `revokeSessions` / `deleteUser`：username。
 
 所有写操作返回更新后的同一脱敏结构。初始 revision 为 null，后续为 UUID。401 未登录，403 非管理员/固定身份不可修改，400 格式错误，409 版本冲突，503 未配置持久存储或初始化条件不足。普通用户即使自行调用这些接口也不能读取或修改管理数据。
+
+## 平仓复盘数据
+
+`GET /api/dashboard` 新增 `closedReview: { rows, complete }`，沿用当前账户鉴权，不新增管理权限。rows 按资产与市场区分，返回 status（closed/partial/unknown）、remainingValue、quantity、averageEntry、averageExit、cost、grossPnl、fees、netPnl、returnRate、holdingMs、lastCloseAt、closeCount、complete 及 fills（最近 100 笔）。金额为十进制字符串或 null。status 按当前剩余估值是否严格小于 1 USDT 判断，行情缺失返回 unknown；历史不足的收益指标为 null。汇总覆盖全部持久化成交，不受 trades 显示列表上限影响。
+
+复盘仅将分摊到已平部分的开仓手续费与平仓手续费计入净收益，不改变账户总览手续费发生即扣的口径；资金费不计入复盘。合约成交新增可选 positionSide（BOTH/LONG/SHORT），用于隔离双向仓位。

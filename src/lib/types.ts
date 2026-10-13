@@ -4,6 +4,7 @@ export type Ticker = { symbol: string; lastPrice: string; priceChangePercent: st
 export type Trade = {
   instrument?: "futures";
   realizedPnl?: string;
+  positionSide?: "BOTH" | "LONG" | "SHORT";
   id: string;
   symbol: string;
   side: "BUY" | "SELL";
@@ -72,6 +73,7 @@ export type ProviderData = {
   ordersComplete: boolean;
 };
 export type Dashboard = {
+  closedReview: import("./closed-review").ClosedReview;
   source: Source;
   accountLabel: string;
   environment: string;

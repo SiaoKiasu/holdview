@@ -58,6 +58,7 @@ const tradesSchema = z.array(
     time: z.number(),
     maker: z.boolean(),
     realizedPnl: decimal,
+    positionSide: z.enum(["BOTH", "LONG", "SHORT"]).optional(),
   }),
 );
 function reason(error: unknown) {
@@ -249,6 +250,7 @@ export class BinanceFuturesClient extends BinanceClient {
       time: t.time,
       isMaker: t.maker,
       realizedPnl: t.realizedPnl,
+      positionSide: t.positionSide,
     }));
   }
   private async syncTrades(ledger: FuturesLedger, openSymbols: string[], warnings: string[]) {
