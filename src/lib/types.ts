@@ -79,6 +79,7 @@ export type Dashboard = {
   history: Snapshot[];
   summary: {
     futuresNetTransfer?: string;
+    futuresEquity?: string;
     futuresFundingPnl?: string | null;
     equity: string;
     equitySource: "exchange" | "calculated";

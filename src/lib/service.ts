@@ -99,12 +99,19 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
   const sum = (values: (string | null)[]) =>
     values.reduce<Decimal>((a, v) => a.plus(v ?? 0), new Decimal(0)).toString();
   const spotValuation = resolveEquity(spotHoldings, data.spotEquity);
-  // User-defined valuation: futures contribute ONLY the administrator's fixed net transfer.
-  // Never add position notional, futures PnL, funding or exchange wallet equity here.
+  // Spot equity already includes spot price PnL. Add only the futures transfer base
+  // and futures holding PnL (exchange unrealized + signed funding), each exactly once.
+  // Futures notional and exchange wallet equity must not be added as assets again.
+  const futuresEquity = futuresEnabled
+    ? new Decimal(netTransfer!).plus(futures.holdingPnl ?? 0).toString()
+    : null;
   const valuation = {
     ...spotValuation,
-    equity: new Decimal(spotValuation.equity).plus(netTransfer ?? 0).toString(),
+    equity: new Decimal(spotValuation.equity).plus(futuresEquity ?? 0).toString(),
     equitySource: futuresEnabled ? ("calculated" as const) : spotValuation.equitySource,
+    equityComplete:
+      spotValuation.equityComplete &&
+      (!futuresEnabled || (futures.holdingPnl !== null && futures.complete)),
   };
   const holdings = [...spotHoldings, ...(futuresEnabled ? futures.holdings : [])].map((h) => ({
     ...h,
@@ -120,6 +127,8 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
   const costed = nonStableHoldings.filter((h) => h.unrealizedPnl !== null);
   const cash = spotHoldings.find((h) => h.asset === "USDT");
   const warnings = [...data.warnings, ...(futuresEnabled ? futures.warnings : [])];
+  if (futuresEnabled && !valuation.equityComplete && spotValuation.equityComplete)
+    warnings.push("合约盈亏或资金费尚未完整读取，总资产暂为已知部分小计，暂不写入资产走势。");
   const combine = (spot: string | null, contract: string | null) =>
     spot === null || (futuresEnabled && contract === null)
       ? null
@@ -190,7 +199,11 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
       pricedAssets: holdings.length - unpriced,
       unpricedAssets: unpriced,
       ...(futuresEnabled
-        ? { futuresNetTransfer: netTransfer!, futuresFundingPnl: futures.fundingPnl }
+        ? {
+            futuresNetTransfer: netTransfer!,
+            futuresEquity: futuresEquity!,
+            futuresFundingPnl: futures.fundingPnl,
+          }
         : {}),
       unrealizedPnl: holdingPnl,
       realizedPnl,

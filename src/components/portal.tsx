@@ -394,14 +394,14 @@ export function Portal() {
     ...visibleHoldings
       .filter((h) => h.instrument !== "futures" && Number(h.value) > 0)
       .map((h) => ({ name: h.asset, value: Number(h.value), allocation: h.allocation })),
-    ...(Number(data?.summary.futuresNetTransfer) > 0
+    ...(Number(data?.summary.futuresEquity) > 0
       ? [
           {
-            name: "合约划转",
-            value: Number(data!.summary.futuresNetTransfer),
+            name: "合约账户",
+            value: Number(data!.summary.futuresEquity),
             allocation:
               Number(data!.summary.equity) > 0
-                ? (Number(data!.summary.futuresNetTransfer) / Number(data!.summary.equity)) * 100
+                ? (Number(data!.summary.futuresEquity) / Number(data!.summary.equity)) * 100
                 : 0,
           },
         ]
