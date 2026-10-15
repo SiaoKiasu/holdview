@@ -2270,3 +2270,105 @@ td small.inline {
 .review-table .review-selected td:first-child {
   background: #f0f4ed;
 }
+
+.trade-plan .plan-stat-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 24px;
+  font-weight: 500;
+  margin: 18px 0 12px;
+}
+.plan-stat-pair span {
+  font-size: 19px;
+  color: var(--muted);
+}
+.plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.plan-actions label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.trade-plan input:not([type="checkbox"]),
+.trade-plan select {
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 0;
+}
+.plan-actions input {
+  width: 75px;
+}
+.plan-table {
+  min-width: 1100px;
+}
+.plan-table input:not([type="checkbox"]) {
+  width: 100px;
+}
+.plan-table small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.plan-table input[type="checkbox"] {
+  accent-color: #355b49;
+}
+.plan-note,
+.plan-notice {
+  padding: 14px 22px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.plan-alert {
+  padding: 16px 22px;
+  color: #a84936;
+  background: #fff2ed;
+  border: 1px solid #f0d5cd;
+  border-radius: 6px;
+}
+.plan-notice {
+  border: 1px solid var(--line);
+  background: #f7f5eb;
+  border-radius: 6px;
+}
+.plan-form {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 20px 24px;
+  align-items: end;
+}
+.plan-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 140px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.plan-form button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 10px 18px;
+}
+@media (max-width: 640px) {
+  .trade-plan .panel-heading {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .trade-plan .plan-stat-pair {
+    font-size: 20px;
+  }
+}

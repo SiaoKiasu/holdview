@@ -226,3 +226,92 @@ describe("read-only futures adapter", () => {
     expect(second.tradesComplete).toBe(true);
   });
 });
+
+describe("futures open order coverage", () => {
+  it("normalizes standard and conditional orders without losing large identifiers", async () => {
+    const client = new BinanceFuturesClient(
+      config,
+      transport((u) => {
+        if (u.pathname === "/fapi/v1/openOrders")
+          return [
+            {
+              orderId: "9007199254740993111",
+              symbol: "NEWUSDT",
+              side: "BUY",
+              type: "LIMIT",
+              price: "50",
+              origQty: "3",
+              executedQty: "1",
+              cumQuote: "49",
+              status: "PARTIALLY_FILLED",
+              time: 1,
+              positionSide: "LONG",
+              reduceOnly: false,
+            },
+          ];
+        if (u.pathname === "/fapi/v1/openAlgoOrders")
+          return [
+            {
+              algoId: "9007199254740993222",
+              symbol: "NEWUSDT",
+              side: "SELL",
+              orderType: "STOP_MARKET",
+              price: "0",
+              quantity: "2",
+              triggerPrice: "45",
+              algoStatus: "NEW",
+              createTime: 2,
+              positionSide: "LONG",
+              reduceOnly: true,
+              closePosition: false,
+            },
+          ];
+        return [];
+      }),
+    );
+    const data = await client.loadFutures();
+    expect(data.ordersComplete).toBe(true);
+    expect(data.orders).toHaveLength(2);
+    expect(data.orders?.[0]).toMatchObject({
+      id: "9007199254740993111",
+      instrument: "futures",
+      quantity: "3",
+      executedQuantity: "1",
+      executedQuote: "49",
+    });
+    expect(data.orders?.[1]).toMatchObject({
+      id: "algo-9007199254740993222",
+      type: "STOP_MARKET",
+      stopPrice: "45",
+      price: "0",
+      reduceOnly: true,
+    });
+  });
+  it("keeps successful orders and marks coverage incomplete if conditional orders fail", async () => {
+    const client = new BinanceFuturesClient(
+      config,
+      transport((u) => {
+        if (u.pathname === "/fapi/v1/openAlgoOrders") throw Error("unavailable");
+        if (u.pathname === "/fapi/v1/openOrders")
+          return [
+            {
+              orderId: "1",
+              symbol: "NEWUSDT",
+              side: "BUY",
+              type: "LIMIT",
+              price: "50",
+              origQty: "3",
+              executedQty: "0",
+              status: "NEW",
+              time: 1,
+            },
+          ];
+        return [];
+      }),
+    );
+    const data = await client.loadFutures();
+    expect(data.ordersComplete).toBe(false);
+    expect(data.orders).toHaveLength(1);
+    expect(data.warnings.join("")).toContain("合约条件单读取失败");
+  });
+});

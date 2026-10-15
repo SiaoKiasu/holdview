@@ -37,11 +37,12 @@ import { STABLECOINS } from "@/lib/assets";
 import dynamic from "next/dynamic";
 const AdminPanel = dynamic(() => import("./admin-panel").then((m) => m.AdminPanel));
 import { formatPrice } from "@/lib/price-format";
+import { TradePlanPanel } from "./trade-plan-panel";
 import { ClosedReviewPanel } from "./closed-review-panel";
 import { CostEditor } from "./cost-editor";
 import { LindenBrand, LindenMark } from "./brand";
 import type { Dashboard, Holding, Trade } from "@/lib/types";
-type Tab = "overview" | "holdings" | "activity" | "review" | "admin";
+type Tab = "overview" | "holdings" | "activity" | "plan" | "review" | "admin";
 const colors = ["#355b49", "#8da184", "#c5bc92", "#b0c6a8", "#dfdfc6", "#8eaba8"];
 const assetNames: Record<string, string> = {
   BTC: "Bitcoin",
@@ -469,6 +470,7 @@ export function Portal() {
     overview: "账户总览",
     holdings: "资产持仓",
     activity: "交易记录",
+    plan: "交易计划",
     review: "平仓复盘",
     admin: "管理后台",
   }[tab];
@@ -484,6 +486,7 @@ export function Portal() {
             [
               { id: "overview", label: "账户总览", icon: LayoutDashboard },
               { id: "holdings", label: "资产持仓", icon: Wallet },
+              { id: "plan", label: "交易计划", icon: BarChart3 },
               { id: "activity", label: "交易记录", icon: Activity },
               { id: "review", label: "平仓复盘", icon: BarChart3 },
             ] as const
@@ -933,6 +936,9 @@ export function Portal() {
                       <TradeTable trades={data.trades.slice(0, 4)} hidden={hidden} />
                     </section>
                   )}
+                  {tab === "plan" && (
+                    <TradePlanPanel key={selectedAccount} data={data} hidden={hidden} />
+                  )}
                   {tab === "review" && (
                     <ClosedReviewPanel
                       key={selectedAccount}
@@ -1053,7 +1059,7 @@ export function Portal() {
                             </thead>
                             <tbody>
                               {data.orders.map((o) => (
-                                <tr key={`${o.symbol}-${o.id}`}>
+                                <tr key={`${o.instrument ?? "spot"}-${o.symbol}-${o.id}`}>
                                   <td>
                                     <strong>{o.symbol}</strong>
                                   </td>

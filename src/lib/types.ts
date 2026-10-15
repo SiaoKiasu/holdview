@@ -17,6 +17,15 @@ export type Trade = {
   isMaker: boolean;
 };
 export type Order = {
+  instrument?: "futures";
+  baseAsset?: string;
+  quoteAsset?: string;
+  executedQuote?: string;
+  stopPrice?: string;
+  reduceOnly?: boolean;
+  closePosition?: boolean;
+  positionSide?: "BOTH" | "LONG" | "SHORT";
+  orderListId?: string;
   id: string;
   symbol: string;
   side: "BUY" | "SELL";
@@ -84,6 +93,7 @@ export type Dashboard = {
   history: Snapshot[];
   summary: {
     futuresEquity?: string | null;
+    futuresAvailable?: string | null;
     holdingPnlComplete?: boolean;
     futuresFundingPnl?: string | null;
     equity: string;
@@ -112,6 +122,7 @@ export type Dashboard = {
     futuresEnabled?: boolean;
     futuresComplete?: boolean;
     futuresTradesComplete?: boolean;
+    futuresPositionsComplete?: boolean;
     futuresHistoryStart?: number | null;
     historySync: HistorySync;
     database: boolean;
@@ -155,6 +166,8 @@ export type FuturesLedger = {
   feeRates: Record<string, string>;
 };
 export type FuturesData = {
+  orders?: Order[];
+  ordersComplete?: boolean;
   account?: {
     equity: string;
     walletBalance: string;

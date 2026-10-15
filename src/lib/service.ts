@@ -191,7 +191,7 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
     holdings,
     closedReview: review,
     trades: combinedTrades.slice(0, 1000),
-    orders: data.orders,
+    orders: [...data.orders, ...(data.futures?.orders ?? [])],
     history,
     summary: {
       ...valuation,
@@ -200,6 +200,7 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
       ...(futuresEnabled
         ? {
             futuresEquity,
+            futuresAvailable: data.futures?.account?.availableBalance ?? null,
             futuresFundingPnl: futures.fundingPnl,
           }
         : {}),
@@ -244,6 +245,7 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
     connection: {
       futuresEnabled,
       futuresComplete: !futuresEnabled || futures.complete,
+      futuresPositionsComplete: !futuresEnabled || data.futures?.positionsComplete === true,
       futuresTradesComplete: !futuresEnabled || data.futures?.tradesComplete === true,
       futuresHistoryStart: data.futures?.ledger.startTime ?? null,
       database: Boolean(c.DATABASE_URL),
@@ -251,7 +253,8 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
       symbols: [...new Set(combinedTrades.map((t) => t.symbol))],
       historySync: data.historySync ?? { scanned: 0, total: 0, oldestCheck: null },
       tradesComplete: data.tradesComplete,
-      ordersComplete: data.ordersComplete,
+      ordersComplete:
+        data.ordersComplete && (!futuresEnabled || data.futures?.ordersComplete === true),
     },
     warnings,
   };

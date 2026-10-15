@@ -82,7 +82,7 @@ export class BinanceClient {
       data =
         this.market === "futures"
           ? JSON.parse(await response.text(), (key, value, context?: { source: string }) =>
-              ["id", "orderId", "tranId"].includes(key) && typeof value === "number"
+              ["id", "orderId", "tranId", "algoId"].includes(key) && typeof value === "number"
                 ? (context?.source ?? String(value))
                 : value,
             )
@@ -194,6 +194,9 @@ export class BinanceClient {
             price: decimal,
             origQty: decimal,
             executedQty: decimal,
+            cummulativeQuoteQty: decimal.optional(),
+            stopPrice: decimal.optional(),
+            orderListId: z.number().optional(),
             status: z.string(),
             time: z.number(),
           }),
@@ -207,6 +210,10 @@ export class BinanceClient {
           price: o.price,
           quantity: o.origQty,
           executedQuantity: o.executedQty,
+          executedQuote: o.cummulativeQuoteQty,
+          stopPrice: o.stopPrice,
+          orderListId:
+            o.orderListId !== undefined && o.orderListId >= 0 ? String(o.orderListId) : undefined,
           status: o.status,
           time: o.time,
         }));
@@ -330,7 +337,11 @@ export class BinanceClient {
       tickers,
       spotEquity,
       trades: markets.flatMap((m) => m.trades).sort((a, b) => b.time - a.time),
-      orders,
+      orders: orders.map((o) => ({
+        ...o,
+        baseAsset: ledger.markets[o.symbol]?.baseAsset,
+        quoteAsset: ledger.markets[o.symbol]?.quoteAsset,
+      })),
       warnings,
       tradesComplete,
       ordersComplete,

@@ -4,7 +4,7 @@ import Decimal from "decimal.js";
 import { AppError } from "./errors";
 import { BinanceClient } from "./binance";
 import type { Config } from "./config";
-import type { FuturesData, FuturesIncome, FuturesLedger, Trade } from "./types";
+import type { FuturesData, FuturesIncome, FuturesLedger, Trade, Order } from "./types";
 
 const decimal = z.string().regex(/^-?\d+(\.\d+)?$/);
 const transactionId = z.union([
@@ -83,7 +83,7 @@ export class BinanceFuturesClient extends BinanceClient {
   async loadFutures(previous?: FuturesLedger): Promise<FuturesData> {
     await this.syncTime();
     const warnings: string[] = [];
-    const [accountResult, positionResult] = await Promise.allSettled([
+    const [accountResult, positionResult, ordersResult, algoResult] = await Promise.allSettled([
       this.request("/fapi/v3/account", {}, true).then((raw) => {
         const result = accountSchema.parse(raw);
         const usdt = result.assets.find((a) => a.asset === "USDT");
@@ -99,7 +99,17 @@ export class BinanceFuturesClient extends BinanceClient {
       this.request("/fapi/v3/positionRisk", {}, true).then((raw) =>
         positionsSchema.parse(raw).filter((p) => !new Decimal(p.positionAmt).isZero()),
       ),
+      this.openOrders(false),
+      this.openOrders(true),
     ]);
+    const orders = [ordersResult, algoResult].flatMap((v) =>
+      v.status === "fulfilled" ? v.value : [],
+    );
+    for (const [result, label] of [
+      [ordersResult, "合约挂单"],
+      [algoResult, "合约条件单"],
+    ] as const)
+      if (result.status === "rejected") warnings.push(label + "读取失败：" + reason(result.reason));
     const account = accountResult.status === "fulfilled" ? accountResult.value : undefined;
     const positions = positionResult.status === "fulfilled" ? positionResult.value : [];
     if (accountResult.status === "rejected")
@@ -223,6 +233,8 @@ export class BinanceFuturesClient extends BinanceClient {
     }
     return {
       account,
+      orders,
+      ordersComplete: ordersResult.status === "fulfilled" && algoResult.status === "fulfilled",
       positionsComplete: positionResult.status === "fulfilled",
       trades: ledger.trades ?? [],
       tradesComplete,
@@ -231,6 +243,51 @@ export class BinanceFuturesClient extends BinanceClient {
       complete: recentComplete && historyComplete && !ledger.historyGap,
       warnings,
     };
+  }
+
+  async openOrders(algo: boolean): Promise<Order[]> {
+    const raw = z
+      .array(z.record(z.string(), z.unknown()))
+      .parse(
+        await this.request(algo ? "/fapi/v1/openAlgoOrders" : "/fapi/v1/openOrders", {}, true),
+      );
+    return raw.map((rawOrder) => {
+      const o = z
+        .object({
+          id: transactionId,
+          symbol: z.string(),
+          side: z.enum(["BUY", "SELL"]),
+          type: z.string(),
+          price: decimal,
+          quantity: decimal,
+          executedQuantity: decimal,
+          executedQuote: decimal.optional(),
+          stopPrice: decimal.optional(),
+          status: z.string(),
+          time: z.number(),
+          positionSide: z.enum(["BOTH", "LONG", "SHORT"]).optional(),
+          reduceOnly: z.boolean().optional(),
+          closePosition: z.boolean().optional(),
+        })
+        .parse({
+          ...rawOrder,
+          id: rawOrder[algo ? "algoId" : "orderId"],
+          type: rawOrder[algo ? "orderType" : "type"],
+          quantity: rawOrder[algo ? "quantity" : "origQty"],
+          executedQuantity: algo ? "0" : rawOrder.executedQty,
+          executedQuote: algo ? "0" : rawOrder.cumQuote,
+          stopPrice: rawOrder[algo ? "triggerPrice" : "stopPrice"],
+          status: rawOrder[algo ? "algoStatus" : "status"],
+          time: rawOrder[algo ? "createTime" : "time"],
+        });
+      return {
+        ...o,
+        instrument: "futures",
+        id: algo ? "algo-" + o.id : o.id,
+        baseAsset: o.symbol.endsWith("USDT") ? o.symbol.slice(0, -4) : undefined,
+        quoteAsset: o.symbol.endsWith("USDT") ? "USDT" : undefined,
+      };
+    });
   }
 
   async futuresTrades(symbol: string, params: Record<string, string> = {}): Promise<Trade[]> {
