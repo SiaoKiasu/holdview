@@ -25,9 +25,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -37,6 +34,7 @@ import { STABLECOINS } from "@/lib/assets";
 import dynamic from "next/dynamic";
 const AdminPanel = dynamic(() => import("./admin-panel").then((m) => m.AdminPanel));
 import { formatPrice } from "@/lib/price-format";
+import { OverviewPanel } from "./overview-panel";
 import { TradePlanPanel } from "./trade-plan-panel";
 import { ClosedReviewPanel } from "./closed-review-panel";
 import { CostEditor } from "./cost-editor";
@@ -390,23 +388,6 @@ export function Portal() {
           h.direction === "已平仓" &&
           Math.abs(Number(h.unrealizedPnl)) >= 1),
     ) ?? [];
-  const distribution = [
-    ...visibleHoldings
-      .filter((h) => h.instrument !== "futures" && Number(h.value) > 0)
-      .map((h) => ({ name: h.asset, value: Number(h.value), allocation: h.allocation })),
-    ...(Number(data?.summary.futuresEquity) > 0
-      ? [
-          {
-            name: "合约账户",
-            value: Number(data!.summary.futuresEquity),
-            allocation:
-              Number(data!.summary.equity) > 0
-                ? (Number(data!.summary.futuresEquity) / Number(data!.summary.equity)) * 100
-                : 0,
-          },
-        ]
-      : []),
-  ];
   const holdings = visibleHoldings.filter((h) =>
     h.asset.toLowerCase().includes(search.toLowerCase()),
   );
@@ -480,14 +461,13 @@ export function Portal() {
         <a className="brand-link" href="/" aria-label="Linden Asset Management 首页">
           <LindenBrand />
         </a>
-        <div className="nav-label">工作空间</div>
         <nav>
           {(
             [
               { id: "overview", label: "账户总览", icon: LayoutDashboard },
               { id: "holdings", label: "资产持仓", icon: Wallet },
-              { id: "plan", label: "交易计划", icon: BarChart3 },
               { id: "activity", label: "交易记录", icon: Activity },
+              { id: "plan", label: "交易计划", icon: BarChart3 },
               { id: "review", label: "平仓复盘", icon: BarChart3 },
             ] as const
           ).map((item) => (
@@ -535,7 +515,6 @@ export function Portal() {
             <LindenBrand />
           </a>
           <div className="breadcrumb">
-            工作空间 <ChevronRight size={13} />
             <strong>{title}</strong>
           </div>
           <div className="topbar-right">
@@ -721,7 +700,7 @@ export function Portal() {
                 </div>
               ) : (
                 <>
-                  {(tab === "overview" || tab === "holdings") && (
+                  {tab === "holdings" && (
                     <div className="stats">
                       <div className="stat featured">
                         <div className="stat-label">
@@ -794,7 +773,7 @@ export function Portal() {
                       </div>
                     </div>
                   )}
-                  {(tab === "overview" || tab === "holdings") && (
+                  {tab === "holdings" && (
                     <div className="capital-strip">
                       <div>
                         <span>账户本金</span>
@@ -807,89 +786,16 @@ export function Portal() {
                     </div>
                   )}
                   {tab === "overview" && (
-                    <>
-                      <div className="charts-grid">
-                        <section className="panel chart-panel">
-                          <div className="panel-heading">
-                            <div>
-                              <h2>
-                                资产走势 <span className="subtle-tag">USDT</span>
-                              </h2>
-                            </div>
-                            <div className="segmented">
-                              {[
-                                { d: 1, label: "24H" },
-                                { d: 7, label: "7D" },
-                                { d: 30, label: "30D" },
-                                { d: 90, label: "90D" },
-                              ].map((p) => (
-                                <button
-                                  key={p.d}
-                                  className={period === p.d ? "selected" : ""}
-                                  onClick={() => setPeriod(p.d)}
-                                >
-                                  {p.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <EquityChart data={data} period={period} hidden={hidden} />
-                        </section>
-                        <section className="panel allocation-panel">
-                          <div className="panel-heading">
-                            <div>
-                              <h2>资产分布</h2>
-                            </div>
-                            <span className="subtle-tag">{visibleHoldings.length} ASSETS</span>
-                          </div>
-                          <div className="donut-wrap">
-                            <ResponsiveContainer width="100%" height={180}>
-                              <PieChart>
-                                <Pie
-                                  data={distribution}
-                                  dataKey="value"
-                                  innerRadius={62}
-                                  outerRadius={79}
-                                  paddingAngle={3}
-                                  stroke="none"
-                                  startAngle={90}
-                                  endAngle={-270}
-                                >
-                                  {distribution.map((h, i) => (
-                                    <Cell key={h.name} fill={colors[i % colors.length]} />
-                                  ))}
-                                </Pie>
-                                <Tooltip
-                                  formatter={(v) =>
-                                    hidden ? "已隐藏" : `${number(Number(v))} USDT`
-                                  }
-                                />
-                              </PieChart>
-                            </ResponsiveContainer>
-                            <div className="donut-center">
-                              <small>持有资产</small>
-                              <strong>
-                                {visibleHoldings.length}
-                                <span> 种</span>
-                              </strong>
-                            </div>
-                          </div>
-                          <div className="allocation-list">
-                            {distribution.slice(0, 5).map((h, i) => (
-                              <div key={h.name}>
-                                <span>
-                                  <i style={{ background: colors[i % colors.length] }} />
-                                  {h.name}
-                                </span>
-                                <strong>{number(h.allocation, 1)}%</strong>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      </div>
-                    </>
+                    <OverviewPanel
+                      data={data}
+                      hidden={hidden}
+                      period={period}
+                      onPeriod={setPeriod}
+                      onNavigate={navigate}
+                      chart={<EquityChart data={data} period={period} hidden={hidden} />}
+                    />
                   )}
-                  {(tab === "overview" || tab === "holdings") && (
+                  {tab === "holdings" && (
                     <section className="panel holdings-panel">
                       <div className="panel-heading">
                         <div>
@@ -906,34 +812,15 @@ export function Portal() {
                             />
                             展示小额资产
                           </label>
-                          {tab === "overview" ? (
-                            <button className="text-button" onClick={() => navigate("holdings")}>
-                              查看全部 <ArrowUpRight size={15} />
-                            </button>
-                          ) : (
-                            <SearchBox value={search} onChange={setSearch} placeholder="搜索币种" />
-                          )}
+                          <SearchBox value={search} onChange={setSearch} placeholder="搜索币种" />
                         </div>
                       </div>
                       <HoldingTable
-                        holdings={tab === "overview" ? visibleHoldings.slice(0, 5) : holdings}
+                        holdings={holdings}
                         money={money}
                         profit={profit}
                         hidden={hidden}
                       />
-                    </section>
-                  )}
-                  {tab === "overview" && (
-                    <section className="panel recent-panel">
-                      <div className="panel-heading">
-                        <div>
-                          <h2>最近成交</h2>
-                        </div>
-                        <button className="text-button" onClick={() => navigate("activity")}>
-                          全部交易 <ArrowUpRight size={15} />
-                        </button>
-                      </div>
-                      <TradeTable trades={data.trades.slice(0, 4)} hidden={hidden} />
                     </section>
                   )}
                   {tab === "plan" && (
