@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import Decimal from "decimal.js";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { formatPrice } from "@/lib/price-format";
 import { STABLECOINS } from "@/lib/assets";
 import type { Dashboard } from "@/lib/types";
 
@@ -71,15 +72,8 @@ export function OverviewPanel({
       return D(b.unrealizedPnl).abs().cmp(D(a.unrealizedPnl).abs());
     })
     .slice(0, 4);
-  const maxPnl = Math.max(1, ...focus.map((h) => Math.abs(Number(h.unrealizedPnl))));
-  const snapshots = data.history
-    .filter((h) => h.time >= Date.now() - period * 86400000)
-    .sort((a, b) => a.time - b.time);
-  const change =
-    snapshots.length >= 2
-      ? D(snapshots.at(-1)!.equity).minus(snapshots[0].equity).toString()
-      : null;
-  const latest = [...data.trades].sort((a, b) => b.time - a.time)[0];
+  const latest = [...data.trades].sort((a, b) => b.time - a.time).slice(0, 4);
+  const price = (value: string | null) => (hidden ? "••••" : formatPrice(value));
   const date = (at: number) =>
     new Date(at).toLocaleString("zh-CN", {
       month: "2-digit",
@@ -162,15 +156,6 @@ export function OverviewPanel({
               ))}
             </div>
           </div>
-          <div className="overview-period">
-            <strong className={tone(change)}>
-              {fmt(change, true)}
-              <small>USDT</small>
-            </strong>
-            <span title="所选期间内首末资产估值之差，包含资金进出，不代表投资收益。">
-              区间资产变化
-            </span>
-          </div>
           {chart}
         </section>
 
@@ -234,57 +219,59 @@ export function OverviewPanel({
             <div>
               <span className="overview-kicker">POSITIONS</span>
               <h2>
-                持仓表现 <span className="count">{active.length}</span>
+                持仓概况 <span className="count">{active.length}</span>
               </h2>
             </div>
             <button className="overview-link" onClick={() => onNavigate("holdings")}>
               全部持仓 <ArrowUpRight size={15} />
             </button>
           </div>
-          <div className="overview-focus-label">
-            <span>按盈亏绝对值排序 · 前四项</span>
-            <span>持仓盈亏 / 收益率</span>
-          </div>
           {focus.length ? (
-            focus.map((h, i) => {
-              const rate =
-                h.instrument === "futures"
-                  ? (h.returnRate ?? null)
-                  : h.price !== null && h.averageCost !== null && D(h.averageCost).gt(0)
-                    ? D(h.price).div(h.averageCost).minus(1).mul(100).toString()
-                    : null;
-              const pnl = Number(h.unrealizedPnl);
-              const width =
-                hidden || h.unrealizedPnl === null
-                  ? 0
-                  : Math.min(50, (Math.abs(pnl) / maxPnl) * 50);
-              return (
-                <div
-                  className="overview-position"
-                  key={(h.instrument ?? "spot") + ":" + (h.symbol ?? h.asset)}
-                >
-                  <span className="overview-position-rank">{String(i + 1).padStart(2, "0")}</span>
-                  <strong>{h.asset}</strong>
-                  <div className="overview-pnl-track">
-                    <i
-                      style={{
-                        left: pnl < 0 ? 50 - width + "%" : "50%",
-                        width: width + "%",
-                        background: pnl < 0 ? "#bf8f7d" : "#648873",
-                      }}
-                    />
-                    <span />
+            <div className="overview-position-grid">
+              {focus.map((h) => {
+                const rate =
+                  h.instrument === "futures"
+                    ? (h.returnRate ?? null)
+                    : h.price !== null && h.averageCost !== null && D(h.averageCost).gt(0)
+                      ? D(h.price).div(h.averageCost).minus(1).mul(100).toString()
+                      : null;
+                return (
+                  <div
+                    className="overview-position-tile"
+                    key={(h.instrument ?? "spot") + ":" + (h.symbol ?? h.asset)}
+                  >
+                    <div className="overview-position-title">
+                      <strong>
+                        <span className="overview-coin-letter" aria-hidden="true">
+                          {h.asset.slice(0, 1)}
+                        </span>
+                        {h.asset}
+                      </strong>
+                      <span className={"overview-return " + tone(rate)}>
+                        {rate === null ? "—" : fmt(rate, true) + (hidden ? "" : "%")}
+                      </span>
+                    </div>
+                    <div className="overview-position-profit">
+                      <span>持仓盈亏{h.pnlComplete === false && " · 暂计"}</span>
+                      <strong className={tone(h.unrealizedPnl)}>
+                        {fmt(h.unrealizedPnl, true)}
+                        <small>USDT</small>
+                      </strong>
+                    </div>
+                    <div className="overview-position-prices">
+                      <div>
+                        <span>成本</span>
+                        <strong>{price(h.averageCost)}</strong>
+                      </div>
+                      <div>
+                        <span>标记价格</span>
+                        <strong>{price(h.price)}</strong>
+                      </div>
+                    </div>
                   </div>
-                  <div className="overview-position-result">
-                    <strong className={tone(h.unrealizedPnl)}>{fmt(h.unrealizedPnl, true)}</strong>
-                    <small>
-                      {rate === null ? "—" : fmt(rate, true) + (hidden ? "" : "%")}
-                      {h.pnlComplete === false && " · 暂计"}
-                    </small>
-                  </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           ) : (
             <div className="overview-empty">暂无持仓</div>
           )}
@@ -323,18 +310,33 @@ export function OverviewPanel({
           </div>
           <div className="overview-latest">
             <span>最近成交{!data.connection.tradesComplete && <small> · 已同步记录</small>}</span>
-            {latest ? (
-              <>
-                <div>
-                  <strong>{latest.symbol}</strong>
-                  <span
-                    className={"overview-trade-side " + (latest.side === "BUY" ? "buy" : "sell")}
+            {latest.length ? (
+              <div className="overview-trade-list">
+                {latest.map((trade) => (
+                  <div
+                    className="overview-trade-row"
+                    key={(trade.instrument ?? "spot") + ":" + trade.symbol + ":" + trade.id}
                   >
-                    {latest.side === "BUY" ? "买入" : "卖出"}
-                  </span>
-                  <time>{date(latest.time)}</time>
-                </div>
-              </>
+                    <div className="overview-trade-asset">
+                      <strong>{trade.symbol}</strong>
+                      <small>
+                        数量{" "}
+                        {hidden
+                          ? "••••"
+                          : Number(trade.quantity).toLocaleString("en-US", {
+                              maximumFractionDigits: 8,
+                            })}
+                      </small>
+                    </div>
+                    <span
+                      className={"overview-trade-side " + (trade.side === "BUY" ? "buy" : "sell")}
+                    >
+                      {trade.side === "BUY" ? "买入" : "卖出"}
+                    </span>
+                    <time>{date(trade.time)}</time>
+                  </div>
+                ))}
+              </div>
             ) : (
               <p>{data.connection.tradesComplete ? "暂无成交" : "成交待同步"}</p>
             )}

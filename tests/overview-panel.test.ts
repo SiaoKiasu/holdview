@@ -104,26 +104,35 @@ describe("overview financial presentation", () => {
     expect(html).toContain("成本或行情待补齐");
     expect(html).toMatch(/已实现盈亏 <\/span><strong class="">—/);
     expect(html).toMatch(/持仓盈亏 <\/span><strong class="">—/);
-    expect(html).toMatch(/overview-period"><strong class="">—/);
   });
-  it("hides values, allocation ratios and signed bars in privacy mode", () => {
+  it("hides values and allocation ratios in privacy mode", () => {
     const html = render(fixture(), true);
     for (const value of ["1,000.20", "750.00", "150.00", "15.0%", "+20.00", "−15.00", "+25.00%"])
       expect(html).not.toContain(value);
     expect(html).toContain("••••");
-    expect(html).toContain("width:0%");
+    expect(html).not.toContain("overview-pnl-track");
   });
-  it("calculates selected-period asset change from chronological snapshots without mutating input", () => {
-    const data = fixture(),
-      now = Date.now();
-    data.history = [
-      { time: now, equity: "1000" },
-      { time: now - 86400000, equity: "900" },
-    ];
+  it("shows the four latest trades in descending order without mutating the source", () => {
+    const data = fixture();
+    data.trades = [1, 5, 2, 4, 3].map((n) => ({
+      id: String(n),
+      symbol: "ASSET" + n + "USDT",
+      side: "BUY",
+      price: "1",
+      quantity: "2",
+      quoteQuantity: "2",
+      fee: "0",
+      feeAsset: "USDT",
+      time: n * 1000,
+      isMaker: true,
+    }));
     const before = structuredClone(data);
     const html = render(data);
-    expect(html).toContain("+100.00");
-    expect(html).toContain("区间资产变化");
+    expect(html).not.toContain("ASSET1USDT");
+    expect(html.indexOf("ASSET5USDT")).toBeLessThan(html.indexOf("ASSET4USDT"));
+    expect(html.indexOf("ASSET4USDT")).toBeLessThan(html.indexOf("ASSET3USDT"));
+    expect(html.indexOf("ASSET3USDT")).toBeLessThan(html.indexOf("ASSET2USDT"));
+    expect(html).not.toContain("区间资产变化");
     expect(data).toEqual(before);
   });
 });
