@@ -2271,29 +2271,236 @@ td small.inline {
   background: #f0f4ed;
 }
 
-.trade-plan .plan-stat-pair {
+/* Trading plan */
+.trade-plan .plan-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.trade-plan .plan-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 24px;
-  font-weight: 500;
-  margin: 18px 0 12px;
+  padding: 22px 24px 18px;
+  border-radius: 9px;
+  min-height: 182px;
 }
-.plan-stat-pair span {
-  font-size: 19px;
-  color: var(--muted);
+.plan-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: #778278;
+}
+.plan-unit {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.plan-stage {
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #f3f5ef;
+  color: #84907c;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.trade-plan .plan-card-featured {
+  background: #edf2ec;
+  border-color: #dbe4d8;
+}
+.plan-card-featured .plan-stage {
+  background: #dfe8dc;
+  color: #4c6952;
+}
+.plan-card-value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: auto 0;
+  padding: 20px 0;
+  font-size: clamp(24px, 1.8vw, 34px);
+  font-weight: 500;
+  letter-spacing: -1px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.plan-card-value small {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  font-weight: 400;
+  color: #8a9487;
+}
+.plan-flow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: auto 0;
+  padding: 19px 0;
+}
+.plan-flow > div {
+  min-width: 0;
+}
+.plan-flow > div + div {
+  padding-left: 18px;
+  border-left: 1px solid #e7eae2;
+}
+.plan-flow-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #899184;
+  font-size: 10px;
+  margin-bottom: 8px;
+}
+.plan-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.plan-dot.buy {
+  background: #6d9077;
+}
+.plan-dot.sell {
+  background: #b9a77f;
+}
+.plan-flow strong {
+  display: block;
+  font-size: clamp(19px, 1.35vw, 26px);
+  font-weight: 500;
+  letter-spacing: -0.6px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.plan-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8a9487;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  padding-top: 13px;
+  border-top: 1px solid #edf0e8;
+}
+.plan-card-footer > :last-child {
+  margin-left: auto;
+}
+.plan-card-featured .plan-card-footer {
+  border-color: #dce5d9;
+}
+.plan-card-featured .plan-card-footer > :last-child {
+  margin-left: 0;
+}
+.plan-cash-footer {
+  flex-wrap: wrap;
+}
+.plan-cash-footer b {
+  font-weight: 400;
+  color: #617161;
+  margin-left: 3px;
+}
+.plan-toolbar {
+  flex-wrap: wrap;
+  padding: 22px 24px;
+}
+.plan-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.plan-selection-count {
+  font-size: 11px;
+  color: #8b9588;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+  white-space: nowrap;
 }
 .plan-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 20px;
 }
-.plan-actions label {
+.plan-selection-actions {
+  display: flex;
+  gap: 8px;
+}
+.plan-actions .button {
+  height: 36px;
+  padding: 8px 12px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.plan-actions .plan-select-button {
+  background: #edf3e9;
+  color: #3d6148;
+  border-color: #e0e9d9;
+}
+.plan-actions .plan-select-button:hover {
+  background: #e1ebdc;
+}
+.plan-actions .plan-clear-button {
+  background: #fff;
+  color: #7a8678;
+}
+.plan-actions .plan-clear-button:hover:not(:disabled) {
+  background: #f6f7f2;
+}
+.plan-fee {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--muted);
+  gap: 10px;
+  color: #7a8678;
+  font-size: 11px;
+  padding-left: 20px;
+  border-left: 1px solid var(--line);
+}
+.plan-fee-field {
+  display: flex;
+  align-items: center;
+  border: 1px solid #dfe4d9;
+  border-radius: 6px;
+  background: #fafbf8;
+  padding-right: 11px;
+  height: 36px;
+}
+.plan-fee-field:focus-within {
+  outline: 2px solid #a9bf91;
+  outline-offset: 2px;
+}
+.trade-plan .plan-fee .plan-fee-field input {
+  width: 54px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 8px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.plan-table tbody tr.plan-row-selected {
+  background: #f5f8f1;
+}
+.plan-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+  padding: 5px;
+  border-radius: 4px;
+  color: #8b9486;
+  background: transparent;
+}
+.plan-delete-button:hover {
+  color: var(--negative);
+  background: #fbede8;
+}
+@media (max-width: 1450px) {
+  .trade-plan .plan-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .plan-card-value {
+    font-size: 30px;
+  }
+  .plan-flow strong {
+    font-size: 25px;
+  }
 }
 .trade-plan input:not([type="checkbox"]),
 .trade-plan select {
@@ -2303,9 +2510,6 @@ td small.inline {
   background: var(--surface);
   color: var(--text);
   min-width: 0;
-}
-.plan-actions input {
-  width: 75px;
 }
 .plan-table {
   min-width: 1100px;
@@ -2368,7 +2572,29 @@ td small.inline {
     flex-wrap: wrap;
     gap: 16px;
   }
-  .trade-plan .plan-stat-pair {
-    font-size: 20px;
+  .trade-plan .plan-summary {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .trade-plan .plan-card {
+    min-height: 168px;
+    padding: 20px;
+  }
+  .plan-toolbar {
+    padding: 20px;
+  }
+  .plan-actions {
+    width: 100%;
+    gap: 14px;
+  }
+  .plan-selection-actions {
+    width: 100%;
+  }
+  .plan-selection-actions .button {
+    flex: 1;
+  }
+  .plan-fee {
+    border-left: 0;
+    padding-left: 0;
   }
 }

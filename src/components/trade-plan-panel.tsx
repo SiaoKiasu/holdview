@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowRight, CheckCheck, Plus, RotateCcw, Trash2 } from "lucide-react";
 import type { Dashboard } from "@/lib/types";
 import { formatPrice } from "@/lib/price-format";
 import { projectPlan, planKey, type PlanChoice, type PlanOrder } from "@/lib/trade-plan";
@@ -19,6 +19,7 @@ export function TradePlanPanel({ data, hidden }: { data: Dashboard; hidden: bool
   const [inputError, setInputError] = useState("");
   const orders = [...data.orders, ...manual];
   const plan = projectPlan(data, orders, choices, fee);
+  const selectedCount = plan.rows.filter((row) => row.choice.enabled).length;
   const num = (n: string | null, digits = 2) =>
     hidden
       ? "••••"
@@ -84,40 +85,76 @@ export function TradePlanPanel({ data, hidden }: { data: Dashboard; hidden: bool
   }
   return (
     <div className="review-page trade-plan">
-      <div className="review-stats">
-        <section className="stat">
-          <div className="stat-label">预计买入 / 卖出 · USDT</div>
-          <div className="plan-stat-pair">
-            {num(after(plan.buy))}
-            <span>/ {num(after(plan.sell))}</span>
+      <div className="review-stats plan-summary">
+        <section className="stat plan-card">
+          <div className="plan-card-heading">
+            <span>预计成交金额</span>
+            <span className="plan-unit">USDT</span>
           </div>
-          <small className="muted-text">预计交易费 {num(after(plan.fees))}</small>
-        </section>
-        <section className="stat">
-          <div className="stat-label">持仓投入占比 · 当前 → 成交后</div>
-          <div className="plan-stat-pair">
-            {pct(plan.currentAllocation)}
-            <span>→ {pct(after(plan.allocation))}</span>
+          <div className="plan-flow">
+            <div>
+              <span className="plan-flow-label">
+                <i className="plan-dot buy" />
+                买入
+              </span>
+              <strong>{num(after(plan.buy))}</strong>
+            </div>
+            <div>
+              <span className="plan-flow-label">
+                <i className="plan-dot sell" />
+                卖出
+              </span>
+              <strong>{num(after(plan.sell))}</strong>
+            </div>
           </div>
-          <small className="muted-text">成本投入 / 当前 Equity</small>
+          <div className="plan-card-footer">
+            <span>预计交易费</span>
+            <span>{num(after(plan.fees))} USDT</span>
+          </div>
         </section>
-        <section className="stat">
-          <div className="stat-label">现货现金 · 成交后</div>
-          <div className="stat-value">
+        <section className="stat plan-card plan-card-featured">
+          <div className="plan-card-heading">
+            <span>持仓投入占比</span>
+            <span className="plan-stage">成交后</span>
+          </div>
+          <div className="plan-card-value">{pct(after(plan.allocation))}</div>
+          <div className="plan-card-footer">
+            <span>当前 {pct(plan.currentAllocation)}</span>
+            <ArrowRight size={14} aria-hidden="true" />
+            <span>成交后</span>
+          </div>
+        </section>
+        <section className="stat plan-card">
+          <div className="plan-card-heading">
+            <span>现货现金</span>
+            <span className="plan-stage">成交后</span>
+          </div>
+          <div className="plan-card-value">
             {num(after(plan.cash))}
             <small>USDT</small>
           </div>
-          <small className="muted-text">
-            可用 {num(after(plan.free))} · 冻结 {num(after(plan.locked))}
-          </small>
+          <div className="plan-card-footer plan-cash-footer">
+            <span>
+              可用 <b>{num(after(plan.free))}</b>
+            </span>
+            <span>
+              冻结 <b>{num(after(plan.locked))}</b>
+            </span>
+          </div>
         </section>
-        <section className="stat">
-          <div className="stat-label">选定交易净收益 · 测算</div>
-          <div className="stat-value">
+        <section className="stat plan-card">
+          <div className="plan-card-heading">
+            <span>预计交易净收益</span>
+            <span className="plan-stage">测算</span>
+          </div>
+          <div className="plan-card-value">
             {num(after(plan.selectedPnl))}
             <small>USDT</small>
           </div>
-          <small className="muted-text">平仓价差减本次买卖费用</small>
+          <div className="plan-card-footer">
+            <span>已扣本次交易费</span>
+            <span>已选 {selectedCount} 笔</span>
+          </div>
         </section>
       </div>
       {plan.errors.length > 0 && (
@@ -131,21 +168,39 @@ export function TradePlanPanel({ data, hidden }: { data: Dashboard; hidden: bool
         </div>
       ))}
       <section className="panel">
-        <div className="panel-heading">
-          <h2>
-            挂单选择 <span className="count">{data.orders.length}</span>
-          </h2>
+        <div className="panel-heading plan-toolbar">
+          <div className="plan-toolbar-title">
+            <h2>
+              挂单选择 <span className="count">{orders.length}</span>
+            </h2>
+            <span className="plan-selection-count">已选 {selectedCount} 笔</span>
+          </div>
           <div className="plan-actions">
-            <button onClick={() => select(true)}>全选可测算单</button>
-            <button onClick={() => select(false)}>清空选择</button>
-            <label>
-              费用率 %{" "}
-              <input
-                aria-label="测算手续费率"
-                inputMode="decimal"
-                value={fee}
-                onChange={(e) => setFee(e.target.value)}
-              />
+            <div className="plan-selection-actions">
+              <button className="button plan-select-button" onClick={() => select(true)}>
+                <CheckCheck size={15} aria-hidden="true" />
+                全选可测算单
+              </button>
+              <button
+                className="button plan-clear-button"
+                disabled={selectedCount === 0}
+                onClick={() => select(false)}
+              >
+                <RotateCcw size={14} aria-hidden="true" />
+                清空选择
+              </button>
+            </div>
+            <label className="plan-fee">
+              <span>费用率</span>
+              <span className="plan-fee-field">
+                <input
+                  aria-label="测算手续费率"
+                  inputMode="decimal"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                />
+                <span>%</span>
+              </span>
             </label>
           </div>
         </div>
@@ -173,7 +228,7 @@ export function TradePlanPanel({ data, hidden }: { data: Dashboard; hidden: bool
             </thead>
             <tbody>
               {plan.rows.map((r) => (
-                <tr key={r.key}>
+                <tr key={r.key} className={r.choice.enabled ? "plan-row-selected" : undefined}>
                   <td>
                     <input
                       aria-label={`计入 ${r.order.symbol} ${r.order.id}`}
@@ -190,6 +245,7 @@ export function TradePlanPanel({ data, hidden }: { data: Dashboard; hidden: bool
                     </small>
                     {r.order.manual && (
                       <button
+                        className="plan-delete-button"
                         aria-label="删除测算单"
                         onClick={() => setManual((v) => v.filter((o) => planKey(o) !== r.key))}
                       >
