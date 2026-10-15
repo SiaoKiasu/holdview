@@ -8,7 +8,7 @@ import { STABLECOINS } from "@/lib/assets";
 import type { Dashboard } from "@/lib/types";
 
 const D = (v: string | number) => new Decimal(v);
-const palette = ["#355b49", "#b7a475", "#91a995"];
+const palette = ["#536b83", "#b8a58a", "#b1bdc9"];
 
 export function OverviewPanel({
   data,
