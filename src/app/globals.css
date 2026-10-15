@@ -1,18 +1,18 @@
 :root {
-  --bg: #f3f3f1;
+  --bg: #f4f3ef;
   --surface: #fff;
-  --surface-soft: #f6f7f8;
-  --surface-tint: #edf0f3;
-  --text: #293643;
-  --muted: #6b7784;
-  --muted-soft: #838c97;
-  --line: #e2e6ea;
-  --accent: #49647c;
+  --surface-soft: #f7f7f3;
+  --surface-tint: #edf1ec;
+  --text: #2c3832;
+  --muted: #6f796f;
+  --muted-soft: #879085;
+  --line: #e1e5dc;
+  --accent: #355b49;
   --green: var(--accent);
-  --gold: #b8a17b;
+  --gold: #b5a17c;
   --serif: "Baskerville", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --positive: #3e806f;
-  --negative: #b5665e;
+  --positive: #477c62;
+  --negative: #b5685d;
   --font: "DM Sans", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 * {
@@ -99,8 +99,8 @@ strong {
   width: 226px;
   position: fixed;
   inset: 0 auto 0 0;
-  border-right: 1px solid #23313e;
-  background: #23313e;
+  border-right: 1px solid #183c32;
+  background: #183c32;
   color: #e8e8e4;
   padding: 32px 22px 0;
   display: flex;
@@ -158,7 +158,7 @@ strong {
 .sidebar .brand-sub {
   font-size: 6px;
   letter-spacing: 1.2px;
-  color: #c4b390;
+  color: #c4b493;
 }
 .brand-link {
   display: block;
@@ -173,7 +173,7 @@ strong {
   color: var(--muted);
 }
 .sidebar .nav-item {
-  color: #b7c0c9;
+  color: #bac9c0;
   border-radius: 3px;
 }
 .sidebar .nav-item:hover {
@@ -192,14 +192,14 @@ strong {
   border-color: #ffffff20;
 }
 .sidebar .profile small {
-  color: #a4afb9;
+  color: #a5b7ab;
 }
 .sidebar .profile .icon-button {
-  color: #b7c0c9;
+  color: #bac9c0;
 }
 .sidebar .avatar {
-  background: #354451;
-  border-color: #4c5c69;
+  background: #2b4c3f;
+  border-color: #496457;
   color: #d9c8a7;
 }
 .avatar {
@@ -347,7 +347,7 @@ strong {
   justify-content: space-between;
   align-items: center;
   padding: 0 36px;
-  background: #fafaf8;
+  background: #faf9f6;
 }
 .breadcrumb {
   display: flex;
@@ -475,7 +475,7 @@ strong {
   border-color: var(--accent);
 }
 .button.primary:hover {
-  background: #344e65;
+  background: #284a39;
 }
 .button.full {
   width: 100%;
@@ -1212,7 +1212,7 @@ td small.inline {
   min-height: 100vh;
 }
 .entrance-art {
-  background: #23313e;
+  background: #183c32;
   color: #f3f0e9;
   width: 46%;
   min-height: 100vh;
@@ -1270,7 +1270,7 @@ td small.inline {
   margin: 24px 0;
 }
 .entrance-copy p {
-  color: #a7b3be;
+  color: #a8b9ac;
   font-size: 13px;
   line-height: 2;
 }
@@ -1294,7 +1294,7 @@ td small.inline {
   align-items: center;
   justify-content: center;
   padding: 35px;
-  background: #fafaf8;
+  background: #faf9f6;
 }
 .login-card {
   width: 100%;
@@ -1524,7 +1524,7 @@ td small.inline {
     width: 100%;
     height: 64px;
     padding: 0 8px;
-    background: #23313ef5;
+    background: #183c32f5;
     backdrop-filter: blur(12px);
     border-right: 0;
     border-top: 1px solid var(--line);
@@ -2312,8 +2312,8 @@ td small.inline {
   border-color: var(--line);
 }
 .plan-card-featured .plan-stage {
-  background: #dce5ed;
-  color: #516b82;
+  background: #dfe7dc;
+  color: #55704f;
 }
 .plan-card-value {
   display: flex;
@@ -2434,12 +2434,12 @@ td small.inline {
   border-radius: 6px;
 }
 .plan-actions .plan-select-button {
-  background: #edf2f6;
-  color: #4a657d;
-  border-color: #dce5ed;
+  background: #eef3eb;
+  color: #466442;
+  border-color: #dfe7dc;
 }
 .plan-actions .plan-select-button:hover {
-  background: #e2eaf1;
+  background: #e3ecdf;
 }
 .plan-actions .plan-clear-button {
   background: #fff;
@@ -2618,8 +2618,8 @@ td small.inline {
   gap: 40px;
   padding: 32px 36px;
   border-radius: 10px;
-  background: #e9edf1;
-  border: 1px solid #dce2e8;
+  background: #eaf0eb;
+  border: 1px solid #dce4d9;
   color: var(--text);
   position: relative;
   overflow: hidden;
@@ -2894,7 +2894,7 @@ td small.inline {
 .overview-position-tile {
   min-width: 0;
   padding: 18px 20px;
-  background: #f7f8fa;
+  background: #f8f8f4;
 }
 .overview-position-tile:nth-child(odd) {
   border-right: 1px solid var(--line);
@@ -2926,9 +2926,9 @@ td small.inline {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #dbe3eb;
-  background: #edf1f5;
-  color: #5a6f84;
+  border: 1px solid #dce5d7;
+  background: #eff3eb;
+  color: #63795b;
   border-radius: 50%;
   font-family: var(--serif);
   font-size: 14px;
@@ -2991,7 +2991,7 @@ td small.inline {
   gap: 14px;
   margin: 0 26px 18px;
   padding: 13px 16px;
-  background: #f4f6f8;
+  background: #f5f5f0;
   border-radius: 5px;
 }
 .overview-orders > div {
@@ -3070,8 +3070,8 @@ td small.inline {
   font-size: 9px;
 }
 .overview-trade-side.buy {
-  background: #edf5f1;
-  color: #47816c;
+  background: #edf4ed;
+  color: #477c62;
 }
 .overview-trade-side.sell {
   background: #f8efed;

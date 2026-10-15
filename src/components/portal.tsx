@@ -41,7 +41,7 @@ import { CostEditor } from "./cost-editor";
 import { LindenBrand, LindenMark } from "./brand";
 import type { Dashboard, Holding, Trade } from "@/lib/types";
 type Tab = "overview" | "holdings" | "activity" | "plan" | "review" | "admin";
-const colors = ["#536b83", "#90a1b3", "#b9a68b", "#b3bdc8", "#d4d8de", "#859797"];
+const colors = ["#416452", "#91a68f", "#b5a17c", "#acbeb0", "#d6d8cc", "#839b92"];
 const assetNames: Record<string, string> = {
   BTC: "Bitcoin",
   ETH: "Ethereum",
@@ -1228,11 +1228,11 @@ function EquityChart({
         <AreaChart data={points} margin={{ top: 20, right: 8, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#91a8bd" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="#91a8bd" stopOpacity={0} />
+              <stop offset="0%" stopColor="#8ca893" stopOpacity={0.2} />
+              <stop offset="100%" stopColor="#8ca893" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="#e6e9ed" strokeDasharray="3 5" vertical={false} />
+          <CartesianGrid stroke="#e6e9e1" strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="time"
             type="number"
@@ -1246,7 +1246,7 @@ function EquityChart({
             }
             axisLine={false}
             tickLine={false}
-            tick={{ fill: "#7b8793", fontSize: 11 }}
+            tick={{ fill: "#7d8879", fontSize: 11 }}
             minTickGap={42}
             dy={10}
           />
@@ -1255,18 +1255,18 @@ function EquityChart({
             tickFormatter={(v) => number(Number(v))}
             axisLine={false}
             tickLine={false}
-            tick={{ fill: "#7b8793", fontSize: 11 }}
+            tick={{ fill: "#7d8879", fontSize: 11 }}
             width={88}
           />
           <Tooltip
             labelFormatter={(v) => time(Number(v))}
             formatter={(v) => [`${number(Number(v))} USDT`, "资产估值"]}
-            contentStyle={{ border: "1px solid #dfe5eb", borderRadius: 10, fontSize: 12 }}
+            contentStyle={{ border: "1px solid #dfe5d9", borderRadius: 10, fontSize: 12 }}
           />
           <Area
             type="monotone"
             dataKey="value"
-            stroke="#536e89"
+            stroke="#52765a"
             strokeWidth={2.5}
             fill="url(#equityFill)"
             isAnimationActive={false}
