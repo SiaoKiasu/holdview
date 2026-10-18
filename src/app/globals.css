@@ -800,39 +800,32 @@ td small.inline {
   font-size: 8px;
 }
 .coin {
+  position: relative;
   display: grid;
   place-items: center;
   width: 31px;
   height: 31px;
   border-radius: 50%;
-  background: var(--coin-color);
-  color: #fff;
-  font-size: 19px;
+  background: #eff3eb;
+  color: #63795b;
+  font-size: 17px;
   font-weight: 500;
   flex-shrink: 0;
+  overflow: hidden;
 }
-.coin-btc {
-  background: #f2a544;
+.coin img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--surface);
+  border-radius: inherit;
 }
-.coin-eth {
-  background: #edf0f8;
-  color: #8994b3;
-}
-.coin-sol {
-  background: #22292c;
-  color: #a7debd;
-}
-.coin-bnb {
-  background: #f7eaca;
-  color: #c69f3b;
-}
-.coin-usdt {
-  background: #deeee5;
-  color: #66a689;
-}
-.coin-usdc {
-  background: #dae8f6;
-  color: #5787b6;
+.coin-compact {
+  width: 25px;
+  height: 25px;
+  font-size: 14px;
 }
 .allocation-cell {
   display: flex;
@@ -2919,19 +2912,6 @@ td small.inline {
   align-items: center;
   font-size: 12px;
   font-weight: 500;
-}
-.overview-coin-letter {
-  width: 25px;
-  height: 25px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #dce5d7;
-  background: #eff3eb;
-  color: #63795b;
-  border-radius: 50%;
-  font-family: var(--serif);
-  font-size: 14px;
 }
 .overview-return {
   font-size: 11px;

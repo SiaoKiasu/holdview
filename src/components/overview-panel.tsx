@@ -5,6 +5,7 @@ import Decimal from "decimal.js";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { formatPrice } from "@/lib/price-format";
 import { STABLECOINS } from "@/lib/assets";
+import { CoinIcon } from "./coin-icon";
 import type { Dashboard } from "@/lib/types";
 
 const D = (v: string | number) => new Decimal(v);
@@ -242,9 +243,7 @@ export function OverviewPanel({
                   >
                     <div className="overview-position-title">
                       <strong>
-                        <span className="overview-coin-letter" aria-hidden="true">
-                          {h.asset.slice(0, 1)}
-                        </span>
+                        <CoinIcon asset={h.asset} compact />
                         {h.asset}
                       </strong>
                       <span className={"overview-return " + tone(rate)}>

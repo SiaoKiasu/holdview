@@ -34,6 +34,7 @@ import { STABLECOINS } from "@/lib/assets";
 import dynamic from "next/dynamic";
 const AdminPanel = dynamic(() => import("./admin-panel").then((m) => m.AdminPanel));
 import { formatPrice } from "@/lib/price-format";
+import { CoinIcon } from "./coin-icon";
 import { OverviewPanel } from "./overview-panel";
 import { TradePlanPanel } from "./trade-plan-panel";
 import { ClosedReviewPanel } from "./closed-review-panel";
@@ -41,7 +42,7 @@ import { CostEditor } from "./cost-editor";
 import { LindenBrand, LindenMark } from "./brand";
 import type { Dashboard, Holding, Trade } from "@/lib/types";
 type Tab = "overview" | "holdings" | "activity" | "plan" | "review" | "admin";
-const colors = ["#416452", "#91a68f", "#b5a17c", "#acbeb0", "#d6d8cc", "#839b92"];
+
 const assetNames: Record<string, string> = {
   BTC: "Bitcoin",
   ETH: "Ethereum",
@@ -49,6 +50,9 @@ const assetNames: Record<string, string> = {
   BNB: "BNB",
   USDT: "Tether",
   USDC: "USD Coin",
+  ZEC: "Zcash",
+  AERO: "Aerodrome",
+  PONS: "Pons",
 };
 function number(value: string | number | null, digits = 2) {
   return value === null
@@ -69,18 +73,6 @@ function time(value: number, short = false) {
     short
       ? { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }
       : { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false },
-  );
-}
-function Coin({ asset, index = 0 }: { asset: string; index?: number }) {
-  return (
-    <span
-      className={`coin coin-${asset.toLowerCase()}`}
-      style={{ "--coin-color": colors[index % colors.length] } as React.CSSProperties}
-    >
-      {({ BTC: "₿", ETH: "Ξ", SOL: "≋", BNB: "◇", USDT: "₮", USDC: "$" } as Record<string, string>)[
-        asset
-      ] ?? asset.slice(0, 1)}
-    </span>
   );
 }
 function Badge({ children, muted = false }: { children: React.ReactNode; muted?: boolean }) {
@@ -1066,7 +1058,7 @@ function HoldingTable({
           </tr>
         </thead>
         <tbody>
-          {holdings.map((h, i) => {
+          {holdings.map((h) => {
             const returnRate =
               h.instrument === "futures"
                 ? (h.returnRate ?? null)
@@ -1077,7 +1069,7 @@ function HoldingTable({
               <tr key={`${h.instrument ?? "spot"}:${h.symbol ?? h.asset}`}>
                 <td>
                   <div className="asset-cell">
-                    <Coin asset={h.asset} index={i} />
+                    <CoinIcon asset={h.asset} />
                     <div>
                       <strong>{h.asset}</strong>
                       <small>{assetNames[h.asset] ?? h.asset}</small>
