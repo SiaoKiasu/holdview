@@ -55,9 +55,9 @@ const assetNames: Record<string, string> = {
   TUSD: "真实美元稳定币",
   USDP: "美元稳定币",
   ZEC: "大零币",
-  AERO: "去中心化交易平台代币",
-  ONDO: "翁多治理代币",
-  PONS: "代币发行平台代币",
+  AERO: "Base 链 · Aerodrome 交易平台代币",
+  ONDO: "Ondo 平台治理代币",
+  PONS: "Robinhood 链 · Pons 发币平台代币",
   KORUB: "韩股 3 倍看涨 ETF",
   牛来: "牛来",
 };
