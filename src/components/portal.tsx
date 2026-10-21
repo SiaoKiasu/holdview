@@ -60,7 +60,7 @@ const assetNames: Record<string, string> = {
   PONS: "Robinhood 链 · Pons 发币平台代币",
   KORUB: "韩股 3 倍看涨 ETF",
   TRUMP: "Solana 链 · 特朗普官方迷因币",
-  WLFI: "以太坊链 · World Liberty Financial 平台治理代币",
+  WLFI: "ETH 链 · World Liberty Financial 平台治理代币",
   牛来: "牛来",
 };
 function number(value: string | number | null, digits = 2) {
