@@ -44,15 +44,22 @@ import type { Dashboard, Holding, Trade } from "@/lib/types";
 type Tab = "overview" | "holdings" | "activity" | "plan" | "review" | "admin";
 
 const assetNames: Record<string, string> = {
-  BTC: "Bitcoin",
-  ETH: "Ethereum",
-  SOL: "Solana",
-  BNB: "BNB",
-  USDT: "Tether",
-  USDC: "USD Coin",
-  ZEC: "Zcash",
-  AERO: "Aerodrome",
-  PONS: "Pons",
+  BTC: "比特币",
+  ETH: "以太坊",
+  SOL: "索拉纳",
+  BNB: "币安币",
+  USDT: "泰达币",
+  USDC: "美元稳定币",
+  FDUSD: "第一数字美元",
+  DAI: "去中心化美元稳定币",
+  TUSD: "真实美元稳定币",
+  USDP: "美元稳定币",
+  ZEC: "大零币",
+  AERO: "去中心化交易平台代币",
+  ONDO: "翁多治理代币",
+  PONS: "代币发行平台代币",
+  KORUB: "韩股 3 倍看涨 ETF",
+  牛来: "牛来",
 };
 function number(value: string | number | null, digits = 2) {
   return value === null
@@ -1072,7 +1079,7 @@ function HoldingTable({
                     <CoinIcon asset={h.asset} />
                     <div>
                       <strong>{h.asset}</strong>
-                      <small>{assetNames[h.asset] ?? h.asset}</small>
+                      <small>{assetNames[h.asset] ?? "其他资产"}</small>
                     </div>
                   </div>
                 </td>
