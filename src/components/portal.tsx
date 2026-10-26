@@ -61,6 +61,8 @@ const assetNames: Record<string, string> = {
   KORUB: "韩股 3 倍看涨 ETF",
   TRUMP: "Solana 链 · 特朗普官方迷因币",
   WLFI: "ETH 链 · World Liberty Financial 平台治理代币",
+  PEPE: "ETH 链 · 佩佩青蛙迷因币",
+  ENA: "ETH 链 · Ethena 协议治理代币",
   牛来: "牛来",
 };
 function number(value: string | number | null, digits = 2) {

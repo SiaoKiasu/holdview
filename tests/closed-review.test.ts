@@ -211,7 +211,7 @@ describe("price display", () => {
     expect(formatPrice("0.7")).toBe("0.7000");
     expect(formatPrice("0.08")).toBe("0.0800");
     expect(formatPrice("0.28752067")).toBe("0.2875");
-    expect(formatPrice("0.000001")).toBe("<0.0001");
+    expect(formatPrice("0.000001")).toBe("0.0₅1");
     expect(formatPrice(null)).toBe("—");
   });
 });
