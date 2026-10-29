@@ -59,6 +59,7 @@ const assetNames: Record<string, string> = {
   ONDO: "Ondo 平台治理代币",
   PONS: "Robinhood 链 · Pons 发币平台代币",
   KORUB: "韩股 3 倍看涨 ETF",
+  GOOGLB: "BNB 链 · 谷歌母公司 Alphabet 股票代币",
   TRUMP: "Solana 链 · 特朗普官方迷因币",
   WLFI: "ETH 链 · World Liberty Financial 平台治理代币",
   PEPE: "ETH 链 · 佩佩青蛙迷因币",
