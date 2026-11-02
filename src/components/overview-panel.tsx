@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import Decimal from "decimal.js";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { buildExposure } from "@/lib/exposure";
-import { ExposureStrip, PositionSummary } from "./portfolio-panels";
+import { ExposureStrip } from "./portfolio-panels";
+import { CoinIcon } from "./coin-icon";
 import { STABLECOINS } from "@/lib/assets";
 import type { Dashboard } from "@/lib/types";
 
@@ -228,14 +229,51 @@ export function OverviewPanel({
             </button>
           </div>
           {focus.length ? (
-            <div className="overview-position-grid">
+            <div className="overview-holdings-list">
+              <div className="overview-holdings-columns" aria-hidden="true">
+                <span>资产</span>
+                <span>净敞口 · USDT</span>
+                <span>对冲比例</span>
+                <span>持仓盈亏 · USDT</span>
+              </div>
               {focus.map((g) => (
                 <button
-                  className="overview-position-tile overview-combination"
+                  className="overview-holding-row"
                   key={g.asset}
+                  aria-label={`${g.asset}，查看${g.hedged ? "对冲分析" : "资产持仓"}`}
                   onClick={() => onNavigate(g.hedged ? "hedge" : "holdings")}
                 >
-                  <PositionSummary group={g} hidden={hidden} />
+                  <span className="overview-holding-asset">
+                    <CoinIcon asset={g.asset} />
+                    <span>
+                      <strong>{g.asset}</strong>
+                      <small>{g.status}</small>
+                    </span>
+                  </span>
+                  <span className="overview-holding-net">
+                    <small className="overview-holding-mobile-label">净敞口 · USDT</small>
+                    <strong>{fmt(g.netExposure)}</strong>
+                  </span>
+                  <span className="overview-holding-hedge">
+                    <small className="overview-holding-mobile-label">对冲比例</small>
+                    <strong>
+                      {fmt(g.hedgeRatio)}
+                      {!hidden && g.hedgeRatio !== null && "%"}
+                    </strong>
+                    <span className="overview-holding-track" aria-hidden="true">
+                      <i
+                        style={{
+                          width: hidden
+                            ? "0%"
+                            : `${Math.min(100, Math.max(0, Number(g.hedgeRatio ?? 0)))}%`,
+                        }}
+                      />
+                    </span>
+                  </span>
+                  <span className="overview-holding-pnl">
+                    <strong className={tone(g.holdingPnl)}>{fmt(g.holdingPnl, true)}</strong>
+                    <small>{g.pnlComplete ? "USDT" : "USDT · 暂计"}</small>
+                  </span>
                 </button>
               ))}
             </div>
