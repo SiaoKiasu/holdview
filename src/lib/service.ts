@@ -17,12 +17,13 @@ import { readLedger, saveLedger } from "./ledger-store";
 type Cached = { data: ProviderData; time: number };
 const cache = new Map<string, Cached>();
 const pending = new Map<string, Promise<Cached>>();
-async function provider(c: Config, futuresEnabled = false): Promise<Cached> {
+async function provider(c: Config, futuresEnabled = false, force = false): Promise<Cached> {
   if (c.DATA_SOURCE === "demo") return { data: demoData(), time: Date.now() };
   const key = createHash("sha256")
     .update(
       JSON.stringify([
         c.ACCOUNT_ID,
+        c.DATABASE_URL,
         c.BINANCE_API_KEY,
         c.BINANCE_API_SECRET,
         c.BINANCE_ENV,
@@ -33,7 +34,7 @@ async function provider(c: Config, futuresEnabled = false): Promise<Cached> {
     .digest("hex");
   for (const [k, value] of cache) if (Date.now() - value.time >= 30000) cache.delete(k);
   const current = cache.get(key);
-  if (current) return current;
+  if (current && !force) return current;
   let request = pending.get(key);
   if (!request) {
     request = (async () => {
@@ -85,15 +86,19 @@ async function provider(c: Config, futuresEnabled = false): Promise<Cached> {
   }
   return request;
 }
-export async function dashboard(c: Config, persist = false): Promise<Dashboard> {
+export async function dashboard(
+  c: Config,
+  persist = false,
+  freshCosts = false,
+): Promise<Dashboard> {
   const demo = c.DATA_SOURCE === "demo";
   const futuresEnabled = !demo;
-  const { data, time } = await provider(c, futuresEnabled);
+  const { data, time } = await provider(c, futuresEnabled, persist);
   const futures = futuresAccounting(futuresEnabled ? data.futures : undefined);
   let costs: Record<string, string> = {};
   let costStorageFailed = false;
   try {
-    costs = (await readCosts(c)).costs;
+    costs = (await readCosts(c, !freshCosts)).costs;
   } catch {
     costStorageFailed = true;
   }
@@ -142,8 +147,7 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
     try {
       // Exchange equity remains usable even when individual ticker valuations are missing.
       if (persist && equityComplete) {
-        await saveSnapshot(c, { time, equity });
-        saved = true;
+        saved = (await saveSnapshot(c, { time, equity })) !== false;
       }
       history = await readHistory(c);
     } catch {

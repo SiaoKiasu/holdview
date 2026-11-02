@@ -35,6 +35,8 @@ import dynamic from "next/dynamic";
 const AdminPanel = dynamic(() => import("./admin-panel").then((m) => m.AdminPanel));
 import { formatPrice } from "@/lib/price-format";
 import { PortfolioHoldings, HedgePanel } from "./portfolio-panels";
+import { useLiveMarket } from "./use-live-market";
+import { ACCOUNT_REFRESH_MS } from "@/lib/live-valuation";
 import { OverviewPanel } from "./overview-panel";
 import { TradePlanPanel } from "./trade-plan-panel";
 import { ClosedReviewPanel } from "./closed-review-panel";
@@ -100,13 +102,17 @@ export function Portal() {
   const [costPending, setCostPending] = useState(false);
   const [costEditorOpen, setCostEditorOpen] = useState(false);
   const [password, setPassword] = useState("");
-  const [data, setData] = useState<Dashboard | null>(null);
+  const [accountData, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const loading = useRef(false);
   const generation = useRef(0);
   const authChannel = useRef<BroadcastChannel | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
+  const data = useLiveMarket(accountData, session === "ready" && tab !== "admin");
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const syncedAt = useRef(0);
   const [hidden, setHidden] = useState(false);
   const [period, setPeriod] = useState(7);
   const [search, setSearch] = useState("");
@@ -143,7 +149,7 @@ export function Portal() {
     }
   }, []);
   const load = useCallback(async () => {
-    if (loading.current || !selectedAccount || tab === "admin") return;
+    if (loading.current || !selectedAccount || tabRef.current === "admin") return;
     loading.current = true;
     const current = generation.current;
     setBusy(true);
@@ -153,6 +159,7 @@ export function Portal() {
       });
       if (generation.current !== current) return;
       setData(next);
+      syncedAt.current = Date.now();
       setError("");
     } catch (e) {
       if (generation.current !== current) return;
@@ -168,7 +175,7 @@ export function Portal() {
         setBusy(false);
       }
     }
-  }, [selectedAccount, tab]);
+  }, [selectedAccount]);
   useEffect(() => {
     void checkSession();
   }, [checkSession]);
@@ -189,13 +196,21 @@ export function Portal() {
     void load();
     const timer = setInterval(() => {
       if (!document.hidden) void load();
-    }, 60000);
+    }, ACCOUNT_REFRESH_MS);
+    const resume = () => {
+      if (!document.hidden && Date.now() - syncedAt.current >= ACCOUNT_REFRESH_MS) void load();
+    };
+    document.addEventListener("visibilitychange", resume);
     const clock = setInterval(() => setNow(Date.now()), 10000);
     return () => {
       clearInterval(timer);
       clearInterval(clock);
+      document.removeEventListener("visibilitychange", resume);
     };
   }, [session, load]);
+  useEffect(() => {
+    if (session === "ready" && tab !== "admin" && !accountData) void load();
+  }, [session, tab, accountData, load]);
   async function login(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -338,7 +353,12 @@ export function Portal() {
         </div>
       </main>
     );
-  const stale = data && now - data.updatedAt > 120000;
+  const stale = data && now - data.updatedAt > ACCOUNT_REFRESH_MS + 120000;
+  const marketStale =
+    data?.source === "binance" &&
+    (data.marketUpdatedAt
+      ? now - data.marketUpdatedAt > 30000 || !data.marketComplete
+      : now - data.updatedAt > 30000);
   const syncIssues = data
     ? [
         ...(!data.connection.ordersComplete ? ["挂单读取失败"] : []),
@@ -546,6 +566,7 @@ export function Portal() {
                       {issue}
                     </Badge>
                   ))}
+                {marketStale && <Badge muted>行情待更新</Badge>}
                 <button className="button" onClick={load} disabled={busy}>
                   <RefreshCw size={15} className={busy ? "spin" : ""} />
                   {busy ? "更新中" : "刷新数据"}
@@ -634,6 +655,7 @@ export function Portal() {
                       );
                       if (current === generation.current) {
                         setData(next);
+                        syncedAt.current = Date.now();
                         setError("");
                       }
                     } catch (e) {
@@ -865,7 +887,18 @@ export function Portal() {
                     </details>
                   )}
                   <footer className="page-footer">
-                    <span>更新于 {time(data.updatedAt, true)}</span>
+                    <span title="持仓、成交和挂单每 10 分钟同步；交易后可手动刷新。">
+                      账户 {time(data.updatedAt, true)}
+                    </span>
+                    {data.source !== "demo" && (
+                      <span title="行情每 5 秒刷新；期间按最近一次持仓估值，资金费和手续费随账户同步。">
+                        行情 {data.marketUpdatedAt ? time(data.marketUpdatedAt, true) : "连接中"}
+                        {data.marketUpdatedAt &&
+                        (now - data.marketUpdatedAt > 30000 || !data.marketComplete)
+                          ? " · 待更新"
+                          : ""}
+                      </span>
+                    )}
                   </footer>
                 </>
               )}

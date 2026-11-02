@@ -7,6 +7,7 @@ import type { Config } from "./config";
 import { accountScope } from "./storage";
 import { demoCosts } from "./demo";
 import { costValuesSchema, type CostSettings } from "./cost-schema";
+import { AsyncCache } from "./async-cache";
 import { AppError } from "./errors";
 type Audit = {
   revision: string;
@@ -16,6 +17,12 @@ type Audit = {
   after: Record<string, string>;
 };
 type Stored = CostSettings & { audit: Audit[] };
+const costCache = new AsyncCache<CostSettings>(60000);
+function cacheKey(c: Config) {
+  return createHash("sha256")
+    .update(JSON.stringify([c.DATABASE_URL, accountScope(c), c.DATA_SOURCE, c.costs]))
+    .digest("hex");
+}
 const ready = new Map<string, Promise<void>>();
 const conflict = () =>
   new AppError("COST_CONFLICT", "成本已被其他管理员修改，请重新加载后再保存。", 409);
@@ -70,9 +77,13 @@ async function readStored(c: Config): Promise<Stored> {
   costValuesSchema.parse(data.costs);
   return data;
 }
-export async function readCosts(c: Config): Promise<CostSettings> {
-  const { audit: _, ...settings } = await readStored(c);
-  return settings;
+export async function readCosts(c: Config, cached = false): Promise<CostSettings> {
+  const read = async () => {
+    const { audit: _, ...settings } = await readStored(c);
+    return settings;
+  };
+  // Editing always reads storage. Only dashboard reads opt in to the short cache.
+  return cached ? costCache.get(cacheKey(c), read) : read();
 }
 export async function writeCosts(
   c: Config,
@@ -128,6 +139,7 @@ export async function writeCosts(
       await writeFile(/*turbopackIgnore: true*/ temporary, JSON.stringify(next), { mode: 0o600 });
       await rename(/*turbopackIgnore: true*/ temporary, /*turbopackIgnore: true*/ target);
     }
+    costCache.invalidate(cacheKey(c));
     const { audit: _, ...settings } = next;
     return settings;
   } finally {

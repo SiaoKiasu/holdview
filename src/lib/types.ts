@@ -84,6 +84,8 @@ export type ProviderData = {
   ordersComplete: boolean;
 };
 export type Dashboard = {
+  marketUpdatedAt?: number;
+  marketComplete?: boolean;
   positionDetails?: FuturesPosition[];
   hedgePeriods?: Record<string, import("./hedge-tracking").HedgePeriod>;
   closedReview: import("./closed-review").ClosedReview;

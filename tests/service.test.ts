@@ -62,6 +62,22 @@ const base = {
   ordersComplete: true,
 };
 describe("snapshot and valuation integrity", () => {
+  it("reuses ordinary reads but explicitly syncing bypasses the short provider cache", async () => {
+    const c = config("explicit-refresh-after-trade");
+    mocks.load.mockResolvedValue({
+      ...base,
+      balances: [{ asset: "USDT", free: "100", locked: "0" }],
+    });
+    mocks.history.mockResolvedValue([]);
+    expect((await dashboard(c)).summary.cash).toBe("100");
+    mocks.load.mockResolvedValue({
+      ...base,
+      balances: [{ asset: "USDT", free: "150", locked: "0" }],
+    });
+    expect((await dashboard(c)).summary.cash).toBe("100");
+    expect((await dashboard(c, true, true)).summary.cash).toBe("150");
+    expect(mocks.load).toHaveBeenCalledTimes(2);
+  });
   it("shows buy-only fees while discovery is incomplete and clearly marks the value provisional", async () => {
     const c = config("buy-fees-during-sync");
     const data = demoData();

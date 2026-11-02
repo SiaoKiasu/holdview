@@ -77,7 +77,7 @@ export async function GET(request: Request, context: { params: Promise<{ resourc
         .slice(0, limit);
       return respond({ data: trades, nextFromId: null, coverage: "模拟成交" });
     }
-    const result = await dashboard(c);
+    const result = await dashboard(c, false, resource === "dashboard");
     if (resource === "dashboard") return respond(result);
     if (resource === "pnl")
       return respond({
