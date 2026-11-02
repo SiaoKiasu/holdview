@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
+  GitCompareArrows,
   ArrowDownLeft,
   ArrowUpRight,
   BarChart3,
@@ -30,43 +31,18 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { STABLECOINS } from "@/lib/assets";
 import dynamic from "next/dynamic";
 const AdminPanel = dynamic(() => import("./admin-panel").then((m) => m.AdminPanel));
 import { formatPrice } from "@/lib/price-format";
-import { CoinIcon } from "./coin-icon";
+import { PortfolioHoldings, HedgePanel } from "./portfolio-panels";
 import { OverviewPanel } from "./overview-panel";
 import { TradePlanPanel } from "./trade-plan-panel";
 import { ClosedReviewPanel } from "./closed-review-panel";
 import { CostEditor } from "./cost-editor";
 import { LindenBrand, LindenMark } from "./brand";
-import type { Dashboard, Holding, Trade } from "@/lib/types";
-type Tab = "overview" | "holdings" | "activity" | "plan" | "review" | "admin";
+import type { Dashboard, Trade } from "@/lib/types";
+type Tab = "overview" | "holdings" | "hedge" | "activity" | "plan" | "review" | "admin";
 
-const assetNames: Record<string, string> = {
-  BTC: "比特币",
-  ETH: "以太坊",
-  SOL: "索拉纳",
-  BNB: "币安币",
-  USDT: "泰达币",
-  USDC: "美元稳定币",
-  FDUSD: "第一数字美元",
-  DAI: "去中心化美元稳定币",
-  TUSD: "真实美元稳定币",
-  USDP: "美元稳定币",
-  ZEC: "大零币",
-  AERO: "Base 链 · Aerodrome 交易平台代币",
-  ONDO: "Ondo 平台治理代币",
-  PONS: "Robinhood 链 · Pons 发币平台代币",
-  KORUB: "韩股 3 倍看涨 ETF",
-  GOOGLB: "BNB 链 · 谷歌母公司 Alphabet 股票代币",
-  TRUMP: "Solana 链 · 特朗普官方迷因币",
-  WLFI: "ETH 链 · World Liberty Financial 平台治理代币",
-  PEPE: "ETH 链 · 佩佩青蛙迷因币",
-  ENA: "ETH 链 · Ethena 协议治理代币",
-  MORPHO: "ETH 链 · Morpho 借贷协议治理代币",
-  牛来: "牛来",
-};
 function number(value: string | number | null, digits = 2) {
   return value === null
     ? "—"
@@ -136,7 +112,6 @@ export function Portal() {
   const [search, setSearch] = useState("");
   const [side, setSide] = useState("ALL");
   const [page, setPage] = useState(1);
-  const [showSmall, setShowSmall] = useState(false);
   const [now, setNow] = useState(Date.now());
   const checkSession = useCallback(async () => {
     const current = ++generation.current;
@@ -383,19 +358,6 @@ export function Portal() {
           : []),
       ]
     : [];
-  const visibleHoldings =
-    data?.holdings.filter(
-      (h) =>
-        showSmall ||
-        h.value === null ||
-        Number(h.value) >= 1 ||
-        (h.instrument === "futures" &&
-          h.direction === "已平仓" &&
-          Math.abs(Number(h.unrealizedPnl)) >= 1),
-    ) ?? [];
-  const holdings = visibleHoldings.filter((h) =>
-    h.asset.toLowerCase().includes(search.toLowerCase()),
-  );
   const trades =
     data?.trades.filter(
       (t) =>
@@ -455,6 +417,7 @@ export function Portal() {
   const title = {
     overview: "账户总览",
     holdings: "资产持仓",
+    hedge: "对冲分析",
     activity: "交易记录",
     plan: "交易计划",
     review: "平仓复盘",
@@ -471,6 +434,7 @@ export function Portal() {
             [
               { id: "overview", label: "账户总览", icon: LayoutDashboard },
               { id: "holdings", label: "资产持仓", icon: Wallet },
+              { id: "hedge", label: "对冲分析", icon: GitCompareArrows },
               { id: "activity", label: "交易记录", icon: Activity },
               { id: "plan", label: "交易计划", icon: BarChart3 },
               { id: "review", label: "平仓复盘", icon: BarChart3 },
@@ -705,91 +669,6 @@ export function Portal() {
                 </div>
               ) : (
                 <>
-                  {tab === "holdings" && (
-                    <div className="stats">
-                      <div className="stat featured">
-                        <div className="stat-label">
-                          {data.summary.equityComplete ? "总资产估值 · Equity" : "已估值资产小计"}
-                          {data.source === "binance" &&
-                            data.summary.equitySource === "calculated" && (
-                              <span className="subtle-tag">估算</span>
-                            )}
-                          <Wallet size={17} />
-                        </div>
-                        <div className="stat-value">
-                          {money(data.summary.equity)}
-                          <span>USDT</span>
-                        </div>
-                      </div>
-                      <div className="stat">
-                        <div className="stat-label">
-                          已实现盈亏
-                          {data.summary.realizedPnl !== null &&
-                            !data.summary.realizedPnlComplete &&
-                            "（暂计）"}
-                          <ArrowUpRight size={17} />
-                        </div>
-                        <div
-                          className={`stat-value ${Number(data.summary.realizedPnl) < 0 ? "negative" : "positive"}`}
-                        >
-                          {profit(data.summary.realizedPnl)}
-                          <span>USDT</span>
-                        </div>
-                        {data.summary.realizedPnl === null && (
-                          <div className="stat-note">{data.summary.realizedPnlNote}</div>
-                        )}
-                      </div>
-                      <div className="stat">
-                        <div className="stat-label">
-                          {data.connection.futuresEnabled ? "持仓盈亏" : "未实现盈亏"}
-                          {data.summary.holdingPnlComplete === false &&
-                            data.summary.unrealizedPnl !== null && (
-                              <span className="subtle-tag">暂计</span>
-                            )}
-                          <BarChart3 size={17} />
-                        </div>
-                        <div
-                          className={`stat-value ${Number(data.summary.unrealizedPnl) < 0 ? "negative" : "positive"}`}
-                        >
-                          {profit(data.summary.unrealizedPnl)}
-                          <span>USDT</span>
-                        </div>
-                        {data.summary.unrealizedPnl === null && (
-                          <div className="stat-note">
-                            {data.connection.futuresEnabled
-                              ? "成本、行情或合约流水待补齐"
-                              : "缺少成本或行情"}
-                          </div>
-                        )}
-                      </div>
-                      <div className="stat">
-                        <div className="stat-label">
-                          现金 · USDT
-                          <Wallet size={17} />
-                        </div>
-                        <div className="stat-value">
-                          {money(data.summary.cash)}
-                          <span>USDT</span>
-                        </div>
-                        <div className="stat-note">
-                          可用 {money(data.summary.cashFree)} · 冻结{" "}
-                          {money(data.summary.cashLocked)}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {tab === "holdings" && (
-                    <div className="capital-strip">
-                      <div>
-                        <span>账户本金</span>
-                        <strong>
-                          {data.summary.principal === null
-                            ? "尚未设置"
-                            : `${money(data.summary.principal)} USDT`}
-                        </strong>
-                      </div>
-                    </div>
-                  )}
                   {tab === "overview" && (
                     <OverviewPanel
                       data={data}
@@ -801,32 +680,10 @@ export function Portal() {
                     />
                   )}
                   {tab === "holdings" && (
-                    <section className="panel holdings-panel">
-                      <div className="panel-heading">
-                        <div>
-                          <h2>
-                            资产持仓 <span className="count">{visibleHoldings.length}</span>
-                          </h2>
-                        </div>
-                        <div className="table-tools">
-                          <label className="checkbox">
-                            <input
-                              type="checkbox"
-                              checked={showSmall}
-                              onChange={(e) => setShowSmall(e.target.checked)}
-                            />
-                            展示小额资产
-                          </label>
-                          <SearchBox value={search} onChange={setSearch} placeholder="搜索币种" />
-                        </div>
-                      </div>
-                      <HoldingTable
-                        holdings={holdings}
-                        money={money}
-                        profit={profit}
-                        hidden={hidden}
-                      />
-                    </section>
+                    <PortfolioHoldings key={selectedAccount} data={data} hidden={hidden} />
+                  )}
+                  {tab === "hedge" && (
+                    <HedgePanel key={selectedAccount} data={data} hidden={hidden} />
                   )}
                   {tab === "plan" && (
                     <TradePlanPanel key={selectedAccount} data={data} hidden={hidden} />
@@ -1045,111 +902,7 @@ function SearchBox({
     </label>
   );
 }
-function HoldingTable({
-  holdings,
-  money,
-  profit,
-  hidden,
-}: {
-  holdings: Holding[];
-  money: (v: string | number | null) => string;
-  profit: (v: string | null) => string;
-  hidden: boolean;
-}) {
-  return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>资产</th>
-            <th>持有数量 / 冻结</th>
-            <th>成本 (USDT / 枚)</th>
-            <th>标记价格 (USDT / 枚)</th>
-            <th>资产估值 (USDT)</th>
-            <th>持仓盈亏 (USDT)</th>
-            <th>资产占比</th>
-          </tr>
-        </thead>
-        <tbody>
-          {holdings.map((h) => {
-            const returnRate =
-              h.instrument === "futures"
-                ? (h.returnRate ?? null)
-                : h.averageCost !== null && Number(h.averageCost) > 0 && h.price !== null
-                  ? ((Number(h.price) / Number(h.averageCost) - 1) * 100).toString()
-                  : null;
-            return (
-              <tr key={`${h.instrument ?? "spot"}:${h.symbol ?? h.asset}`}>
-                <td>
-                  <div className="asset-cell">
-                    <CoinIcon asset={h.asset} />
-                    <div>
-                      <strong>{h.asset}</strong>
-                      <small>{assetNames[h.asset] ?? "其他资产"}</small>
-                    </div>
-                  </div>
-                </td>
-                <td className="numeric">
-                  <strong>{hidden ? "••••" : number(h.quantity, 8)}</strong>
-                  {h.instrument !== "futures" && (
-                    <small>冻结 {hidden ? "••••" : number(h.locked, 8)}</small>
-                  )}
-                </td>
-                <td className="numeric">
-                  <strong>{hidden ? "••••" : formatPrice(h.averageCost)}</strong>
-                  {h.averageCost === null && h.instrument !== "futures" && <small>未设置</small>}
-                </td>
-                <td className="numeric">
-                  <strong>{hidden ? "••••" : formatPrice(h.price)}</strong>
-                  {h.price === null && h.direction !== "已平仓" && <small>暂无行情</small>}
-                </td>
-                <td className="numeric">
-                  <strong>{money(h.value)}</strong>
 
-                  {h.value === null && <small>未计入估值</small>}
-                </td>
-                <td className="numeric">
-                  <strong
-                    className={
-                      h.unrealizedPnl === null
-                        ? "muted-text"
-                        : Number(h.unrealizedPnl) >= 0
-                          ? "positive"
-                          : "negative"
-                    }
-                  >
-                    {h.instrument !== "futures" && STABLECOINS.has(h.asset) ? (
-                      "—"
-                    ) : (
-                      <>
-                        {profit(h.unrealizedPnl)}
-                        {!hidden &&
-                          h.unrealizedPnl !== null &&
-                          ` (${returnRate === null ? "—" : `${signed(returnRate)}%`})`}
-                      </>
-                    )}
-                  </strong>
-                  {h.instrument === "futures" && h.pnlComplete === false && (
-                    <small>资金费待同步</small>
-                  )}
-                </td>
-                <td>
-                  <div className="allocation-cell">
-                    <span>{number(h.allocation, 1)}%</span>
-                    <div>
-                      <i style={{ width: `${Math.max(0, Math.min(100, h.allocation))}%` }} />
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {!holdings.length && <div className="empty">没有符合条件的资产。</div>}
-    </div>
-  );
-}
 function TradeTable({ trades, hidden }: { trades: Trade[]; hidden: boolean }) {
   return (
     <div className="table-scroll">

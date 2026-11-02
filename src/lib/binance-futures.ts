@@ -31,10 +31,24 @@ const positionsSchema = z.array(
     markPrice: decimal,
     unRealizedProfit: decimal,
     marginAsset: z.string(),
+    liquidationPrice: decimal.optional(),
+    initialMargin: decimal.optional(),
+    maintMargin: decimal.optional(),
+    isolatedWallet: decimal.optional(),
+    marginType: z.enum(["isolated", "cross"]).optional(),
   }),
 );
 const accountSchema = z.object({
   totalMarginBalance: decimal,
+  positions: z
+    .array(
+      z.object({
+        symbol: z.string(),
+        positionSide: z.enum(["BOTH", "LONG", "SHORT"]),
+        isolated: z.boolean().optional(),
+      }),
+    )
+    .optional(),
   assets: z.array(
     z.object({
       asset: z.string(),
@@ -90,6 +104,7 @@ export class BinanceFuturesClient extends BinanceClient {
         if (!usdt && !new Decimal(result.totalMarginBalance).isZero())
           throw new AppError("FUTURES_ASSET", "合约账户缺少 USDT 权益字段。", 502);
         return {
+          positionModes: result.positions ?? [],
           equity: usdt?.marginBalance ?? "0",
           walletBalance: usdt?.walletBalance ?? "0",
           availableBalance: usdt?.availableBalance ?? "0",
@@ -112,6 +127,13 @@ export class BinanceFuturesClient extends BinanceClient {
       if (result.status === "rejected") warnings.push(label + "读取失败：" + reason(result.reason));
     const account = accountResult.status === "fulfilled" ? accountResult.value : undefined;
     const positions = positionResult.status === "fulfilled" ? positionResult.value : [];
+    for (const p of positions) {
+      const mode = account?.positionModes.find(
+        (v) => v.symbol === p.symbol && v.positionSide === p.positionSide,
+      );
+      if (mode?.isolated !== undefined) p.marginType = mode.isolated ? "isolated" : "cross";
+      else if (p.isolatedWallet && new Decimal(p.isolatedWallet).gt(0)) p.marginType = "isolated";
+    }
     if (accountResult.status === "rejected")
       warnings.push(`合约账户权益读取失败：${reason(accountResult.reason)}`);
     if (positionResult.status === "rejected")

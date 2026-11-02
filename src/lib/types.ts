@@ -61,6 +61,7 @@ export type MarketLedger = {
   trades: Trade[];
 };
 export type TradeLedger = {
+  hedgeAnchors?: Record<string, import("./hedge-tracking").HedgeAnchor>;
   version: 1;
   markets: Record<string, MarketLedger>;
   feeRates?: Record<string, { price: string | null; checkedAt: number }>;
@@ -68,6 +69,7 @@ export type TradeLedger = {
 };
 export type HistorySync = { scanned: number; total: number; oldestCheck: number | null };
 export type ProviderData = {
+  hedgePeriods?: Record<string, import("./hedge-tracking").HedgePeriod>;
   futures?: FuturesData;
   spotEquity?: string | null;
   ledger?: TradeLedger;
@@ -82,6 +84,8 @@ export type ProviderData = {
   ordersComplete: boolean;
 };
 export type Dashboard = {
+  positionDetails?: FuturesPosition[];
+  hedgePeriods?: Record<string, import("./hedge-tracking").HedgePeriod>;
   closedReview: import("./closed-review").ClosedReview;
   source: Source;
   accountLabel: string;
@@ -94,6 +98,7 @@ export type Dashboard = {
   summary: {
     futuresEquity?: string | null;
     futuresAvailable?: string | null;
+    futuresInitialMargin?: string | null;
     holdingPnlComplete?: boolean;
     futuresFundingPnl?: string | null;
     equity: string;
@@ -144,6 +149,11 @@ export type FuturesIncome = {
   time: number;
 };
 export type FuturesPosition = {
+  liquidationPrice?: string;
+  initialMargin?: string;
+  maintMargin?: string;
+  isolatedWallet?: string;
+  marginType?: "isolated" | "cross";
   symbol: string;
   positionSide: "BOTH" | "LONG" | "SHORT";
   positionAmt: string;

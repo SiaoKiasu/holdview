@@ -11,6 +11,7 @@ import type { Dashboard, ProviderData } from "./types";
 import { tradeRealizedPnl } from "./trade-pnl";
 import { readCosts } from "./cost-store";
 import { closedReview } from "./closed-review";
+import { trackHedges } from "./hedge-tracking";
 import { futuresAccounting } from "./futures-pnl";
 import { readLedger, saveLedger } from "./ledger-store";
 type Cached = { data: ProviderData; time: number };
@@ -58,6 +59,7 @@ async function provider(c: Config, futuresEnabled = false): Promise<Cached> {
       } else if (futuresResult.status === "rejected") {
         data.warnings.push("合约账户暂未读取成功，请检查当前 API 的合约读取权限与 IP 限制。");
       }
+      data.hedgePeriods = trackHedges(data, Date.now());
       if (data.ledger && !storageFailed) {
         try {
           await saveLedger(c, data.ledger, stored?.revision);
@@ -65,8 +67,10 @@ async function provider(c: Config, futuresEnabled = false): Promise<Cached> {
           storageFailed = true;
         }
       }
-      if (storageFailed)
+      if (storageFailed) {
+        data.hedgePeriods = {};
         data.warnings.push("成交同步进度未能保存，将在下次刷新重试；请联系管理员检查存储。");
+      }
       if (process.env.VERCEL && !c.DATABASE_URL)
         data.warnings.push("历史同步进度暂未启用持久保存，服务重启后可能重新同步；请联系管理员。");
       return data;
@@ -189,6 +193,8 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
         : "Binance Spot",
     updatedAt: time,
     holdings,
+    positionDetails: data.futures?.positions ?? [],
+    hedgePeriods: data.hedgePeriods ?? {},
     closedReview: review,
     trades: combinedTrades.slice(0, 1000),
     orders: [...data.orders, ...(data.futures?.orders ?? [])],
@@ -201,6 +207,7 @@ export async function dashboard(c: Config, persist = false): Promise<Dashboard> 
         ? {
             futuresEquity,
             futuresAvailable: data.futures?.account?.availableBalance ?? null,
+            futuresInitialMargin: data.futures?.account?.initialMargin ?? null,
             futuresFundingPnl: futures.fundingPnl,
           }
         : {}),

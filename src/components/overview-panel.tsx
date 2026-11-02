@@ -3,9 +3,9 @@
 import type { ReactNode } from "react";
 import Decimal from "decimal.js";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
-import { formatPrice } from "@/lib/price-format";
+import { buildExposure } from "@/lib/exposure";
+import { ExposureStrip, PositionSummary } from "./portfolio-panels";
 import { STABLECOINS } from "@/lib/assets";
-import { CoinIcon } from "./coin-icon";
 import type { Dashboard } from "@/lib/types";
 
 const D = (v: string | number) => new Decimal(v);
@@ -23,7 +23,7 @@ export function OverviewPanel({
   hidden: boolean;
   period: number;
   onPeriod: (period: number) => void;
-  onNavigate: (tab: "holdings" | "activity" | "plan") => void;
+  onNavigate: (tab: "holdings" | "activity" | "plan" | "hedge") => void;
   chart: ReactNode;
 }) {
   const { summary: s } = data;
@@ -60,21 +60,20 @@ export function OverviewPanel({
     allocationTotal.gt(0);
   const ratio = (v: string | null) =>
     allocationReady && v !== null ? D(v).div(allocationTotal).mul(100).toNumber() : null;
-  const active = data.holdings.filter(
-    (h) =>
-      !STABLECOINS.has(h.asset) &&
-      h.direction !== "已平仓" &&
-      (h.value === null || D(h.value).abs().gte(1)),
+  const exposure = buildExposure(data);
+  const active = exposure.groups.filter(
+    (g) =>
+      !g.stable &&
+      ((g.grossExposure ?? (g.positions.length ? null : g.spot?.value)) == null ||
+        D(g.grossExposure ?? g.spot?.value ?? 0).gte(1)),
   );
   const focus = [...active]
-    .sort((a, b) => {
-      if (a.unrealizedPnl === null) return b.unrealizedPnl === null ? 0 : 1;
-      if (b.unrealizedPnl === null) return -1;
-      return D(b.unrealizedPnl).abs().cmp(D(a.unrealizedPnl).abs());
-    })
+    .sort(
+      (a, b) =>
+        Number(b.hedged) - Number(a.hedged) || D(b.grossExposure ?? 0).cmp(a.grossExposure ?? 0),
+    )
     .slice(0, 4);
   const latest = [...data.trades].sort((a, b) => b.time - a.time).slice(0, 4);
-  const price = (value: string | null) => (hidden ? "••••" : formatPrice(value));
   const date = (at: number) =>
     new Date(at).toLocaleString("zh-CN", {
       month: "2-digit",
@@ -133,6 +132,7 @@ export function OverviewPanel({
         </div>
       </section>
 
+      <ExposureStrip data={data} hidden={hidden} />
       <div className="overview-main-grid">
         <section className="panel overview-trend">
           <div className="overview-panel-heading">
@@ -220,7 +220,7 @@ export function OverviewPanel({
             <div>
               <span className="overview-kicker">POSITIONS</span>
               <h2>
-                持仓概况 <span className="count">{active.length}</span>
+                组合持仓 <span className="count">{active.length}</span>
               </h2>
             </div>
             <button className="overview-link" onClick={() => onNavigate("holdings")}>
@@ -229,47 +229,15 @@ export function OverviewPanel({
           </div>
           {focus.length ? (
             <div className="overview-position-grid">
-              {focus.map((h) => {
-                const rate =
-                  h.instrument === "futures"
-                    ? (h.returnRate ?? null)
-                    : h.price !== null && h.averageCost !== null && D(h.averageCost).gt(0)
-                      ? D(h.price).div(h.averageCost).minus(1).mul(100).toString()
-                      : null;
-                return (
-                  <div
-                    className="overview-position-tile"
-                    key={(h.instrument ?? "spot") + ":" + (h.symbol ?? h.asset)}
-                  >
-                    <div className="overview-position-title">
-                      <strong>
-                        <CoinIcon asset={h.asset} compact />
-                        {h.asset}
-                      </strong>
-                      <span className={"overview-return " + tone(rate)}>
-                        {rate === null ? "—" : fmt(rate, true) + (hidden ? "" : "%")}
-                      </span>
-                    </div>
-                    <div className="overview-position-profit">
-                      <span>持仓盈亏{h.pnlComplete === false && " · 暂计"}</span>
-                      <strong className={tone(h.unrealizedPnl)}>
-                        {fmt(h.unrealizedPnl, true)}
-                        <small>USDT</small>
-                      </strong>
-                    </div>
-                    <div className="overview-position-prices">
-                      <div>
-                        <span>成本</span>
-                        <strong>{price(h.averageCost)}</strong>
-                      </div>
-                      <div>
-                        <span>标记价格</span>
-                        <strong>{price(h.price)}</strong>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {focus.map((g) => (
+                <button
+                  className="overview-position-tile overview-combination"
+                  key={g.asset}
+                  onClick={() => onNavigate(g.hedged ? "hedge" : "holdings")}
+                >
+                  <PositionSummary group={g} hidden={hidden} />
+                </button>
+              ))}
             </div>
           ) : (
             <div className="overview-empty">暂无持仓</div>
