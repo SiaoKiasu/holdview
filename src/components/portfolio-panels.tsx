@@ -240,7 +240,7 @@ function FuturesRisk({ positions, hidden }: { positions: FuturesPosition[]; hidd
 }
 
 export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: boolean }) {
-  const [mode, setMode] = useState<"combined" | "spot" | "futures">("combined");
+  const [mode, setMode] = useState<"combined" | "spot" | "futures">("spot");
   const [expanded, setExpanded] = useState<string[]>([]);
   const [search, setSearch] = useState(""),
     [small, setSmall] = useState(false);
@@ -305,9 +305,9 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
           <h2>资产持仓</h2>
           <div className="segmented">
             {[
-              ["combined", "组合"],
               ["spot", "现货"],
               ["futures", "合约"],
+              ["combined", "组合"],
             ].map(([id, label]) => (
               <button
                 key={id}
