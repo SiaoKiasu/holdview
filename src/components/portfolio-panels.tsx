@@ -239,6 +239,123 @@ function FuturesRisk({ positions, hidden }: { positions: FuturesPosition[]; hidd
   );
 }
 
+function FuturesHoldingsTable({ groups, hidden }: { groups: PositionGroup[]; hidden: boolean }) {
+  const [open, setOpen] = useState<string[]>([]);
+  const { n, p, tone } = presentation(hidden);
+  return (
+    <div className="table-scroll futures-table-scroll">
+      <table className="futures-holdings-table">
+        <thead>
+          <tr>
+            <th>合约</th>
+            <th>方向</th>
+            <th>持仓数量</th>
+            <th>开仓均价 / U</th>
+            <th>标记价格 / U</th>
+            <th>名义金额 / U</th>
+            <th>浮动盈亏 / U</th>
+            <th aria-label="展开明细" />
+          </tr>
+        </thead>
+        <tbody>
+          {groups
+            .filter((g) => g.positions.length)
+            .map((g) => {
+              const expanded = open.includes(g.asset);
+              const toggle = () =>
+                setOpen((v) => (expanded ? v.filter((a) => a !== g.asset) : [...v, g.asset]));
+              return (
+                <Fragment key={g.asset}>
+                  {g.positions.map((position, index) => {
+                    const quantity = D(position.positionAmt).abs();
+                    const basis = quantity.mul(position.entryPrice);
+                    const rate = basis.gt(0)
+                      ? D(position.unRealizedProfit).div(basis).mul(100).toString()
+                      : null;
+                    const short = D(position.positionAmt).lt(0);
+                    return (
+                      <tr
+                        key={`${position.symbol}:${position.positionSide}`}
+                        className={expanded ? "is-expanded" : ""}
+                      >
+                        <td>
+                          <button
+                            className="futures-asset-button"
+                            onClick={toggle}
+                            aria-expanded={expanded}
+                            aria-label={`${g.asset} ${short ? "空头" : "多头"}仓位明细`}
+                          >
+                            <CoinIcon asset={g.asset === "1000PEPE" ? "PEPE" : g.asset} />
+                            <span>
+                              <strong>{g.asset}</strong>
+                              <small>USDT 永续{g.hedged ? ` · ${g.status}` : ""}</small>
+                            </span>
+                          </button>
+                        </td>
+                        <td>
+                          <span className={`futures-direction ${short ? "short" : "long"}`}>
+                            <i />
+                            {short ? "空头" : "多头"}
+                          </span>
+                        </td>
+                        <td>{n(quantity.toString(), 8)}</td>
+                        <td>{p(position.entryPrice)}</td>
+                        <td>{p(position.markPrice)}</td>
+                        <td>
+                          {n(
+                            D(position.markPrice).gt(0)
+                              ? quantity.mul(position.markPrice).toString()
+                              : null,
+                          )}
+                        </td>
+                        <td className="futures-row-pnl">
+                          <strong className={tone(position.unRealizedProfit)}>
+                            {n(position.unRealizedProfit, 2, true)}
+                          </strong>
+                          <small className={tone(position.unRealizedProfit)}>
+                            {n(rate, 2, true)}
+                            {!hidden && rate !== null ? "%" : ""}
+                          </small>
+                        </td>
+                        <td>
+                          <button
+                            className="futures-detail-toggle"
+                            onClick={toggle}
+                            aria-expanded={expanded}
+                            aria-label={`${expanded ? "收起" : "展开"} ${g.asset} ${index + 1} 明细`}
+                          >
+                            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {expanded && (
+                    <tr className="futures-detail-row">
+                      <td colSpan={8}>
+                        <div className="futures-detail-content">
+                          <div className="futures-detail-heading">
+                            <strong>{g.asset} · 仓位明细</strong>
+                            <span>
+                              累计资金费{" "}
+                              <b className={tone(g.fundingPnl)}>{n(g.fundingPnl, 2, true)}</b> USDT
+                              {!g.pnlComplete ? " · 流水待补齐" : ""}
+                            </span>
+                          </div>
+                          <FuturesRisk positions={g.positions} hidden={hidden} />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: boolean }) {
   const [mode, setMode] = useState<"combined" | "spot" | "futures">("spot");
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -268,13 +385,18 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
   const spotValue = allSpot.every((h) => h.value !== null)
     ? allSpot.reduce((v, h) => v.plus(h.value!), D(0)).toString()
     : null;
+  const futuresPnl =
+    e.positionsReady && !e.unsupported.length
+      ? positions.reduce((v, a) => v.plus(a.unRealizedProfit), D(0)).toString()
+      : null;
+  const shownPnl = mode === "futures" ? futuresPnl : data.summary.unrealizedPnl;
   return (
     <div className="portfolio-upgrade">
       <section className="exposure-strip">
         <div>
-          <span>现货市值 · 含稳定币</span>
+          <span>{mode === "futures" ? "合约权益" : "现货市值 · 含稳定币"}</span>
           <strong>
-            {n(spotValue)}
+            {n(mode === "futures" ? data.summary.futuresEquity : spotValue)}
             <small>USDT</small>
           </strong>
         </div>
@@ -286,54 +408,66 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
           </strong>
         </div>
         <div>
-          <span>对冲标的</span>
+          <span>{mode === "futures" ? "保证金占用" : "对冲标的"}</span>
           <strong>
-            {hidden ? "••••" : e.positionsReady ? e.groups.filter((g) => g.hedged).length : "—"}
-            <small>个</small>
+            {mode === "futures"
+              ? n(data.summary.futuresInitialMargin)
+              : hidden
+                ? "••••"
+                : e.positionsReady
+                  ? e.groups.filter((g) => g.hedged).length
+                  : "—"}
+            <small>{mode === "futures" ? "USDT" : "个"}</small>
           </strong>
         </div>
         <div>
-          <span>持仓盈亏</span>
-          <strong className={tone(data.summary.unrealizedPnl)}>
-            {n(data.summary.unrealizedPnl, 2, true)}
+          <span>{mode === "futures" ? "浮动盈亏 · 当前筛选" : "持仓盈亏"}</span>
+          <strong className={tone(shownPnl)}>
+            {n(shownPnl, 2, true)}
             <small>USDT</small>
           </strong>
         </div>
       </section>
       <section className="panel portfolio-table-panel">
-        <div className="panel-heading">
-          <h2>资产持仓</h2>
-          <div className="segmented">
-            {[
-              ["spot", "现货"],
-              ["futures", "合约"],
-              ["combined", "组合"],
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                className={mode === id ? "selected" : ""}
-                aria-pressed={mode === id}
-                onClick={() => setMode(id as typeof mode)}
-              >
-                {label}
-              </button>
-            ))}
+        <div className="portfolio-toolbar">
+          <div className="portfolio-toolbar-heading">
+            <h2>资产持仓</h2>
+            <div className="segmented">
+              {[
+                ["spot", "现货"],
+                ["futures", "合约"],
+                ["combined", "组合"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  className={mode === id ? "selected" : ""}
+                  aria-pressed={mode === id}
+                  onClick={() => setMode(id as typeof mode)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="portfolio-filterbar">
-          <label className="checkbox">
-            <input type="checkbox" checked={small} onChange={(ev) => setSmall(ev.target.checked)} />
-            展示小额资产
-          </label>
-          <label className="search-box">
-            <Search size={16} />
-            <input
-              aria-label="搜索币种"
-              value={search}
-              placeholder="搜索币种"
-              onChange={(ev) => setSearch(ev.target.value)}
-            />
-          </label>
+          <div className="portfolio-filterbar">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={small}
+                onChange={(ev) => setSmall(ev.target.checked)}
+              />
+              展示小额资产
+            </label>
+            <label className="search-box">
+              <Search size={16} />
+              <input
+                aria-label="搜索币种"
+                value={search}
+                placeholder="搜索币种"
+                onChange={(ev) => setSearch(ev.target.value)}
+              />
+            </label>
+          </div>
         </div>
         {!e.positionsReady && mode !== "spot" && (
           <p className="hedge-inline-note">合约持仓读取中，净数量和对冲状态暂不计算。</p>
@@ -478,28 +612,7 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
             </table>
           </div>
         )}
-        {mode === "futures" && (
-          <div className="portfolio-futures-list">
-            {groups
-              .filter((g) => g.positions.length)
-              .map((g) => (
-                <section key={g.asset}>
-                  <div className="hedge-card-heading">
-                    <strong>
-                      <CoinIcon asset={g.asset} compact />
-                      {g.asset}
-                    </strong>
-                    <HedgeStatus group={g} />
-                  </div>
-                  <PositionLegs group={{ ...g, spot: undefined }} hidden={hidden} />
-                  <details className="hedge-risk-details">
-                    <summary>保证金与强平信息</summary>
-                    <FuturesRisk positions={g.positions} hidden={hidden} />
-                  </details>
-                </section>
-              ))}
-          </div>
-        )}
+        {mode === "futures" && <FuturesHoldingsTable groups={groups} hidden={hidden} />}
         {((mode === "combined" && !groups.length) ||
           (mode === "spot" && !spot.length) ||
           (mode === "futures" && !positions.length)) && (

@@ -3745,3 +3745,177 @@ td small.inline {
     display: none;
   }
 }
+
+/* Unified contract blotter: one header, one row per leg, optional risk details. */
+.portfolio-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 24px;
+}
+.portfolio-toolbar-heading {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.portfolio-toolbar-heading h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.portfolio-toolbar .portfolio-filterbar {
+  padding: 0;
+  gap: 20px;
+}
+.futures-holdings-table {
+  min-width: 880px;
+}
+.futures-holdings-table > thead > tr > th {
+  padding: 14px 20px;
+  font-size: 11px;
+  font-weight: 400;
+}
+.futures-holdings-table > tbody > tr > td {
+  padding: 22px 20px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.futures-holdings-table > thead > tr > th:first-child,
+.futures-holdings-table > tbody > tr > td:first-child {
+  padding-left: 26px;
+}
+.futures-holdings-table > thead > tr > th:last-child,
+.futures-holdings-table > tbody > tr > td:last-child {
+  padding-left: 0;
+  padding-right: 22px;
+  width: 42px;
+}
+.futures-holdings-table > tbody > tr:hover > td,
+.futures-holdings-table > tbody > tr.is-expanded > td {
+  background: #f7f9f6;
+}
+.futures-asset-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  text-align: left;
+  padding: 0;
+  background: transparent;
+}
+.futures-asset-button > span:last-child {
+  display: grid;
+  gap: 5px;
+}
+.futures-asset-button strong {
+  font-size: 15px;
+  font-weight: 500;
+}
+.portfolio-table-panel .futures-asset-button small {
+  margin: 0;
+  font-size: 10px;
+}
+.futures-direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 12px;
+}
+.futures-direction i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.futures-direction.short {
+  color: #657e94;
+}
+.futures-row-pnl > strong {
+  font-weight: 500;
+  font-size: 17px;
+}
+.portfolio-table-panel .futures-row-pnl small {
+  font-size: 11px;
+  opacity: 0.85;
+}
+.portfolio-table-panel .futures-row-pnl small.positive {
+  color: var(--positive);
+}
+.portfolio-table-panel .futures-row-pnl small.negative {
+  color: var(--negative);
+}
+.futures-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+}
+.futures-detail-toggle:hover {
+  background: var(--surface-tint);
+  color: var(--accent);
+}
+.futures-asset-button:focus-visible,
+.futures-detail-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.futures-holdings-table > tbody > .futures-detail-row > td {
+  padding: 0 24px 22px;
+  background: #f7f9f6;
+}
+.futures-detail-content {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.futures-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+.futures-detail-heading > strong {
+  font-weight: 500;
+}
+.futures-detail-heading > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.futures-detail-heading b {
+  margin: 0 5px 0 10px;
+  font-weight: 500;
+}
+.futures-detail-content table th,
+.futures-detail-content table td {
+  padding: 12px 14px;
+  font-size: 11px;
+}
+@media (max-width: 800px) {
+  .portfolio-toolbar {
+    padding: 20px;
+    gap: 20px;
+  }
+  .portfolio-toolbar-heading,
+  .portfolio-toolbar .portfolio-filterbar {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .portfolio-toolbar .portfolio-filterbar {
+    gap: 12px;
+  }
+  .portfolio-toolbar .search-box input {
+    width: 110px;
+  }
+  .futures-holdings-table > tbody > tr > td {
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+}
