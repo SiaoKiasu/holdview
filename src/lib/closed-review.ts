@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
 import type { ProviderData, Holding, Trade } from "./types";
 import { feeRateKey } from "./trade-pnl";
-import { incomeIdentity } from "./futures-units";
+import { incomeIdentity, positionNotional, supportedPosition } from "./futures-units";
 import { STABLECOINS } from "./assets";
 
 Decimal.set({ precision: 36 });
@@ -19,13 +19,19 @@ export type ClosingFill = {
   returnRate: string | null;
   holdingMs: number | null;
 };
-export type ClosedReviewRow = {
+type ReviewInstrument = {
+  symbol?: string;
+  contractMarket?: "usd" | "coin";
+  direction?: "long" | "short";
+};
+export type ClosedReviewRow = ReviewInstrument & {
   id: string;
   asset: string;
   market: "spot" | "futures";
   status: "closed" | "partial" | "unknown";
   remainingValue: string | null;
   quantity: string;
+  quantityUnit: string;
   averageEntry: string | null;
   averageExit: string;
   cost: string | null;
@@ -66,16 +72,25 @@ export function closedReview(
 ): ClosedReview {
   const groups = new Map<
     string,
-    { asset: string; market: "spot" | "futures"; fills: ClosingFill[]; complete: boolean }
+    {
+      asset: string;
+      market: "spot" | "futures";
+      fills: ClosingFill[];
+      complete: boolean;
+    } & ReviewInstrument
   >();
   const record = (
     asset: string,
     market: "spot" | "futures",
     fill: ClosingFill,
     complete: boolean,
+    instrument: ReviewInstrument = {},
   ) => {
-    const key = `${market}:${asset}`;
-    if (!groups.has(key)) groups.set(key, { asset, market, fills: [], complete });
+    const key =
+      market === "spot"
+        ? `spot:${asset}`
+        : `futures:${instrument.contractMarket}:${instrument.symbol}:${instrument.direction}`;
+    if (!groups.has(key)) groups.set(key, { asset, market, fills: [], complete, ...instrument });
     const g = groups.get(key)!;
     g.complete &&= complete;
     g.fills.push(fill);
@@ -240,7 +255,7 @@ export function closedReview(
   }
   const futures = new Map<string, { p: Inventory; direction: number }>();
   for (const t of ordered(data.futures?.trades ?? [])) {
-    if (!t.symbol.endsWith("USDT")) continue;
+    if (t.contractMarket === "coin" || !t.symbol.endsWith("USDT")) continue;
     const asset = t.symbol.slice(0, -4),
       key = `${t.symbol}:${t.positionSide ?? "BOTH"}`;
     if (!futures.has(key)) futures.set(key, { p: empty(), direction: 0 });
@@ -279,6 +294,11 @@ export function closedReview(
       "futures",
       fill,
       data.futures?.tradesComplete === true && !data.futures?.ledger.historyGap,
+      {
+        symbol: t.symbol,
+        contractMarket: "usd",
+        direction: (state.direction || -sign) > 0 ? "long" : "short",
+      },
     );
     const remainder = q.minus(closed);
     if (remainder.gt(0) && !hedgeClose) {
@@ -327,7 +347,8 @@ export function closedReview(
           : data.futures?.ledger.feeRates[feeRateKey(t.realizedPnlAsset ?? t.feeAsset, t.time)];
     const gross = rate ? native.mul(rate) : native.isZero() ? D(0) : null;
     const fill = close(p, t, closed, closed, fee?.mul(closed).div(q) ?? null, gross ?? D(0));
-    fill.quantity = (entryCoin.gt(0) ? entryCoin : closed.mul(size).div(t.price)).toString();
+    // Keep contract count as the quantity; coin equivalents vary with price.
+    fill.quantity = closed.toString();
     fill.entryPrice = entry?.toString() ?? null;
     fill.grossPnl = gross?.toString() ?? null;
     fill.netPnl = gross !== null && fill.fees !== null ? gross.minus(fill.fees).toString() : null;
@@ -341,6 +362,11 @@ export function closedReview(
       "futures",
       fill,
       data.futures?.tradesComplete === true && !data.futures?.ledger.historyGap,
+      {
+        symbol: t.symbol,
+        contractMarket: "coin",
+        direction: (state.direction || -sign) > 0 ? "long" : "short",
+      },
     );
     const remainder = q.minus(closed);
     if (remainder.gt(0) && !hedgeClose) {
@@ -359,13 +385,23 @@ export function closedReview(
       const cost = sum(g.fills, "cost"),
         net = sum(g.fills, "netPnl");
       const related = holdings.filter(
-        (h) => (h.instrument ?? "spot") === g.market && h.asset === g.asset,
+        (h) => (h.instrument ?? "spot") === "spot" && h.asset === g.asset,
       );
-      const positionsKnown = g.market === "spot" || data.futures?.positionsComplete !== false;
+      const positions = (data.futures?.positions ?? []).filter(
+        (p) =>
+          p.symbol === g.symbol &&
+          (p.contractMarket === "coin" ? "coin" : "usd") === g.contractMarket &&
+          (g.direction === "long" ? D(p.positionAmt).gt(0) : D(p.positionAmt).lt(0)),
+      );
       const value =
-        !positionsKnown || related.some((h) => h.value === null)
-          ? null
-          : related.reduce((n, h) => n.plus(h.value ?? 0), D());
+        g.market === "spot"
+          ? related.some((h) => h.value === null)
+            ? null
+            : related.reduce((n, h) => n.plus(h.value ?? 0), D())
+          : data.futures?.positionsComplete === false ||
+              positions.some((p) => !supportedPosition(p))
+            ? null
+            : positions.reduce((n, p) => n.plus(positionNotional(p)), D());
       const entryKnown = g.fills.every((f) => f.entryPrice !== null);
       return {
         id,
@@ -374,16 +410,26 @@ export function closedReview(
         status: value === null ? "unknown" : value.lt(1) ? "closed" : "partial",
         remainingValue: value?.toString() ?? null,
         quantity: quantity.toString(),
+        quantityUnit: g.contractMarket === "coin" ? "张" : g.asset,
+        symbol: g.symbol,
+        contractMarket: g.contractMarket,
+        direction: g.direction,
+        // COIN-M is inverse: total face value / total coin equivalent. Arithmetic
+        // averaging or weighting exits by entry coin amounts misstates fill prices.
         averageEntry: entryKnown
-          ? g.fills
-              .reduce((n, f) => n.plus(D(f.quantity).mul(f.entryPrice!)), D())
-              .div(quantity)
-              .toString()
+          ? (g.contractMarket === "coin"
+              ? quantity.div(
+                  g.fills.reduce((n, f) => n.plus(D(f.quantity).div(f.entryPrice!)), D()),
+                )
+              : g.fills
+                  .reduce((n, f) => n.plus(D(f.quantity).mul(f.entryPrice!)), D())
+                  .div(quantity)
+            ).toString()
           : null,
-        averageExit: g.fills
-          .reduce((n, f) => n.plus(D(f.quantity).mul(f.exitPrice)), D())
-          .div(quantity)
-          .toString(),
+        averageExit: (g.contractMarket === "coin"
+          ? quantity.div(g.fills.reduce((n, f) => n.plus(D(f.quantity).div(f.exitPrice)), D()))
+          : g.fills.reduce((n, f) => n.plus(D(f.quantity).mul(f.exitPrice)), D()).div(quantity)
+        ).toString(),
         cost: cost?.toString() ?? null,
         grossPnl: sum(g.fills, "grossPnl")?.toString() ?? null,
         fees: sum(g.fills, "fees")?.toString() ?? null,

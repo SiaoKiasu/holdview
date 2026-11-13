@@ -178,9 +178,10 @@ describe("closed position review", () => {
       ],
     };
     const rows = closedReview(d, []).rows;
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     expect(rows.find((r) => r.market === "spot")?.netPnl).toBe("20");
-    expect(rows.find((r) => r.market === "futures")?.netPnl).toBe("26");
+    expect(rows.find((r) => r.direction === "long")?.netPnl).toBe("18");
+    expect(rows.find((r) => r.direction === "short")?.netPnl).toBe("8");
   });
   it("keeps hedge sides separate even with simultaneous long and short positions", () => {
     const d = data([]);
@@ -197,10 +198,19 @@ describe("closed position review", () => {
         t(4, "BUY", "1", "110", { positionSide: "SHORT", realizedPnl: "10" }),
       ],
     };
-    expect(closedReview(d, []).rows[0]).toMatchObject({
-      closeCount: 2,
-      grossPnl: "20",
-      netPnl: "20",
+    const rows = closedReview(d, []).rows;
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.direction === "long")).toMatchObject({
+      closeCount: 1,
+      averageEntry: "100",
+      averageExit: "110",
+      netPnl: "10",
+    });
+    expect(rows.find((r) => r.direction === "short")).toMatchObject({
+      closeCount: 1,
+      averageEntry: "120",
+      averageExit: "110",
+      netPnl: "10",
     });
   });
 });
@@ -213,5 +223,116 @@ describe("price display", () => {
     expect(formatPrice("0.28752067")).toBe("0.2875");
     expect(formatPrice("0.000001")).toBe("0.0₅1");
     expect(formatPrice(null)).toBe("—");
+  });
+});
+
+describe("inverse review instrument boundaries", () => {
+  const coin = (
+    id: number,
+    side: "BUY" | "SELL",
+    quantity: string,
+    price: string,
+    extra: Partial<Trade> = {},
+  ) =>
+    t(id, side, quantity, price, {
+      instrument: "futures",
+      contractMarket: "coin",
+      symbol: "BTCUSD_PERP",
+      baseAsset: "BTC",
+      contractSize: "100",
+      realizedPnlAsset: "BTC",
+      realizedPnl: "0",
+      ...extra,
+    });
+  function futuresData(trades: Trade[]) {
+    const d = data([]);
+    d.futures = {
+      positions: [],
+      positionsComplete: true,
+      complete: true,
+      tradesComplete: true,
+      warnings: [],
+      trades,
+      ledger: { incomes: [], feeRates: {}, startTime: 1, syncedThrough: 1 },
+    };
+    return d;
+  }
+  it("never averages U-margined history into a COIN-M contract or its settlement inventory", () => {
+    const d = futuresData([
+      t(1, "SELL", "0.019", "78000", { realizedPnl: "0" }),
+      t(2, "BUY", "0.019", "77000", { realizedPnl: "19" }),
+      coin(3, "SELL", "70", "70000"),
+      coin(4, "BUY", "70", "68000", { realizedPnl: "0.00294117647" }),
+    ]);
+    d.futures!.ledger.feeRates["BTC:" + 4 * 86400000] = "68000";
+    const rows = closedReview(d, [holding("4000")]).rows;
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.contractMarket === "usd")).toMatchObject({
+      symbol: "BTCUSDT",
+      averageEntry: "78000",
+      averageExit: "77000",
+      quantity: "0.019",
+      quantityUnit: "BTC",
+      direction: "short",
+    });
+    expect(rows.find((r) => r.contractMarket === "coin")).toMatchObject({
+      symbol: "BTCUSD_PERP",
+      averageEntry: "70000",
+      quantity: "70",
+      quantityUnit: "张",
+      direction: "short",
+      status: "closed",
+      remainingValue: "0",
+    });
+    expect(Number(rows.find((r) => r.contractMarket === "coin")!.averageExit)).toBeCloseTo(
+      68000,
+      8,
+    );
+  });
+  it("uses contract-weighted inverse prices for multiple entries and exits", () => {
+    const d = futuresData([
+      coin(1, "SELL", "50", "50000"),
+      coin(2, "SELL", "50", "100000"),
+      coin(3, "BUY", "50", "40000"),
+      coin(4, "BUY", "50", "80000"),
+    ]);
+    const r = closedReview(d, []).rows[0];
+    expect(r.quantity).toBe("100");
+    expect(Number(r.averageEntry)).toBeCloseTo(10000 / (5000 / 50000 + 5000 / 100000), 8);
+    expect(Number(r.averageExit)).toBeCloseTo(10000 / (5000 / 40000 + 5000 / 80000), 8);
+    expect(r.fills.map((f) => f.exitPrice)).toEqual(["80000", "40000"]);
+    expect(r.fills.map((f) => f.quantity)).toEqual(["50", "50"]);
+  });
+  it("does not mark a closed short as open because another product or long remains", () => {
+    const d = futuresData([coin(1, "SELL", "10", "50000"), coin(2, "BUY", "10", "40000")]);
+    d.futures!.positions = [
+      {
+        symbol: "BTCUSDT",
+        positionSide: "SHORT",
+        positionAmt: "-1",
+        entryPrice: "50000",
+        markPrice: "40000",
+        marginAsset: "USDT",
+        unRealizedProfit: "10000",
+      },
+      {
+        symbol: "BTCUSD_PERP",
+        contractMarket: "coin",
+        contracts: "5",
+        contractSize: "100",
+        baseAsset: "BTC",
+        settlementPrice: "40000",
+        positionSide: "LONG",
+        positionAmt: "0.0125",
+        entryPrice: "50000",
+        markPrice: "40000",
+        marginAsset: "BTC",
+        unRealizedProfit: "-100",
+      },
+    ];
+    expect(closedReview(d, []).rows[0]).toMatchObject({ status: "closed", remainingValue: "0" });
+    d.futures!.positions[1].positionAmt = "-0.0125";
+    d.futures!.positions[1].positionSide = "SHORT";
+    expect(closedReview(d, []).rows[0]).toMatchObject({ status: "partial", remainingValue: "500" });
   });
 });

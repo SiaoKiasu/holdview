@@ -629,7 +629,7 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
               <thead>
                 <tr>
                   <th>资产</th>
-                  <th>数量 / 冻结</th>
+                  <th>数量</th>
                   <th>成本 / U</th>
                   <th>标记价格 / U</th>
                   <th>市值 / U</th>
@@ -673,14 +673,8 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
                               (opened ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
                           </button>
                         </td>
-                        <td>
-                          {n(h.quantity, 8)}
-                          <small>现货冻结 {n(h.locked, 8)}</small>
-                        </td>
-                        <td>
-                          {p(h.averageCost)}
-                          {book && <small>{book.complete ? "账本均价" : "账本待核对"}</small>}
-                        </td>
+                        <td>{n(h.quantity, 8)}</td>
+                        <td>{p(h.averageCost)}</td>
                         <td>{p(h.price)}</td>
                         <td>{n(h.value)}</td>
                         <td className={tone(h.unrealizedPnl)}>

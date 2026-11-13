@@ -4123,3 +4123,15 @@ td small.inline {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Units remain adjacent to the reviewed quantity. */
+.review-page td .inline-unit {
+  display: inline;
+  margin-left: 3px;
+}
+.review-bar-row > strong:first-child small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}

@@ -2,8 +2,13 @@
 import { useState } from "react";
 import Decimal from "decimal.js";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown } from "lucide-react";
-import type { ClosedReview } from "@/lib/closed-review";
+import type { ClosedReview, ClosedReviewRow } from "@/lib/closed-review";
 import { formatPrice } from "@/lib/price-format";
+
+const instrumentLabel = (r: ClosedReviewRow) =>
+  r.market === "spot"
+    ? "现货"
+    : `${r.contractMarket === "coin" ? "币本位" : "U 本位"} · ${r.direction === "short" ? "空" : "多"}`;
 
 export function ClosedReviewPanel({ review, hidden }: { review: ClosedReview; hidden: boolean }) {
   const [filter, setFilter] = useState("all");
@@ -47,7 +52,7 @@ export function ClosedReviewPanel({ review, hidden }: { review: ClosedReview; hi
     .filter(
       (r) =>
         (filter === "all" || r.status === filter) &&
-        r.asset.toLowerCase().includes(search.trim().toLowerCase()),
+        `${r.asset} ${r.symbol ?? ""}`.toLowerCase().includes(search.trim().toLowerCase()),
     )
     .sort((a, b) =>
       sort === "time"
@@ -110,7 +115,7 @@ export function ClosedReviewPanel({ review, hidden }: { review: ClosedReview; hi
       <section className="panel">
         <div className="panel-heading">
           <h2>
-            币种累计 <span className="count">{rows.length}</span>
+            平仓汇总 <span className="count">{rows.length}</span>
           </h2>
           <span className="muted-text">剩余估值 &lt; 1 USDT 视为已清仓</span>
         </div>
@@ -171,8 +176,9 @@ export function ClosedReviewPanel({ review, hidden }: { review: ClosedReview; hi
               {rows.map((r) => (
                 <tr key={r.id} className={expanded === r.id ? "review-selected" : ""}>
                   <td>
-                    <strong>{r.asset}</strong>
+                    <strong>{r.symbol ?? r.asset}</strong>
                     <small>
+                      {instrumentLabel(r)} ·{" "}
                       {r.status === "closed"
                         ? "已清仓"
                         : r.status === "partial"
@@ -181,7 +187,9 @@ export function ClosedReviewPanel({ review, hidden }: { review: ClosedReview; hi
                       {!r.complete ? " · 暂计" : ""}
                     </small>
                   </td>
-                  <td className="numeric">{money(r.quantity, 8)}</td>
+                  <td className="numeric">
+                    {money(r.quantity, 8)} <small className="inline-unit">{r.quantityUnit}</small>
+                  </td>
                   <td className="numeric">{price(r.averageEntry)}</td>
                   <td className="numeric">{price(r.averageExit)}</td>
                   <td className={`numeric ${tone(r.netPnl)}`}>
@@ -220,7 +228,9 @@ export function ClosedReviewPanel({ review, hidden }: { review: ClosedReview; hi
       {active && (
         <section className="panel">
           <div className="panel-heading">
-            <h2>{active.asset} · 平仓明细</h2>
+            <h2>
+              {active.symbol ?? active.asset} · {instrumentLabel(active)} · 平仓明细
+            </h2>
             <span className="muted-text">
               共 {active.closeCount} 笔{active.closeCount > 100 ? " · 最近 100 笔" : ""}
             </span>
@@ -259,7 +269,10 @@ export function ClosedReviewPanel({ review, hidden }: { review: ClosedReview; hi
                 {active.fills.map((f) => (
                   <tr key={f.id}>
                     <td>{date(f.time)}</td>
-                    <td className="numeric">{money(f.quantity, 8)}</td>
+                    <td className="numeric">
+                      {money(f.quantity, 8)}{" "}
+                      <small className="inline-unit">{active.quantityUnit}</small>
+                    </td>
                     <td className="numeric">{price(f.entryPrice)}</td>
                     <td className="numeric">{price(f.exitPrice)}</td>
                     <td className="numeric">{money(f.fees)}</td>
@@ -288,7 +301,10 @@ export function ClosedReviewPanel({ review, hidden }: { review: ClosedReview; hi
               .slice(0, 12)
               .map((r) => (
                 <div className="review-bar-row" key={r.id}>
-                  <strong>{r.asset}</strong>
+                  <strong>
+                    {r.asset}
+                    <small>{instrumentLabel(r)}</small>
+                  </strong>
                   <div className="review-bar-track">
                     {!hidden && (
                       <i
