@@ -32,7 +32,8 @@ export function futuresAccounting(data: FuturesData | undefined) {
   const missingRates = new Set<string>();
   const seen = new Set<string>();
   for (const i of data.ledger.incomes) {
-    if (!["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"].includes(i.incomeType)) continue;
+    if (!["REALIZED_PNL", "COMMISSION", "FUNDING_FEE", "COMMISSION_REBATE"].includes(i.incomeType))
+      continue;
     const key = incomeIdentity(i);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -51,7 +52,8 @@ export function futuresAccounting(data: FuturesData | undefined) {
       fundingBySymbol.set(i.symbol, (fundingBySymbol.get(i.symbol) ?? new Decimal(0)).plus(amount));
     } else {
       realized = realized.plus(amount);
-      if (i.incomeType === "COMMISSION") fees = fees.plus(amount);
+      if (i.incomeType === "COMMISSION" || i.incomeType === "COMMISSION_REBATE")
+        fees = fees.plus(amount);
     }
   }
   const symbols = new Set([

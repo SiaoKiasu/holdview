@@ -172,6 +172,39 @@ describe("coin asset accounting", () => {
       -1070,
     );
   });
+  it("reconciles fee rebates as newly acquired coins and realized fee credits exactly once", () => {
+    const d = fixture();
+    addIncome(d, "COMMISSION", "-0.001");
+    addIncome(d, "COMMISSION_REBATE", "0.0002", 240000);
+    d.ledger!.coinFutures!.incomes.push({ ...d.ledger!.coinFutures!.incomes[1] });
+    const b = coinInventory(d),
+      f = futuresAccounting(d.futures);
+    expect(b.assets.BTC).toMatchObject({
+      quantity: "0.0992",
+      cost: "7934",
+      complete: true,
+      commissionCoin: "-0.001",
+      commissionValue: "-70",
+      rebateCoin: "0.0002",
+      rebateValue: "14",
+      disposalPnl: "-10",
+    });
+    expect(f).toMatchObject({ realizedPnl: "-56", feePnl: "-56" });
+    // The rebate's $14 is recognized at settlement. Subsequent coin appreciation
+    // belongs to holding PnL, never a second recognition of the fee credit.
+    const coinValue = new Decimal(b.assets.BTC.quantity).mul(72000);
+    near(
+      coinValue
+        .minus(b.assets.BTC.cost!)
+        .plus(b.accounting.realizedPnl!)
+        .plus(f.realizedPnl!)
+        .toString(),
+      coinValue.minus(8000).toNumber(),
+    );
+    d.ledger!.coinFutures!.feeRates = { "BTC:180000": "70000" };
+    expect(coinInventory(d).assets.BTC.averageCost).toBeNull();
+    expect(futuresAccounting(d.futures).realizedPnl).toBeNull();
+  });
   it("handles partial close, mixed funding and fees without creating unrealized coins as holdings", () => {
     const d = fixture();
     addIncome(d, "REALIZED_PNL", "0.002");

@@ -221,7 +221,9 @@ export class BinanceFuturesClient extends BinanceClient {
           (i) =>
             i.asset !== "USDT" &&
             !new Decimal(i.income).isZero() &&
-            ["COMMISSION", "REALIZED_PNL", "FUNDING_FEE"].includes(i.incomeType) &&
+            ["COMMISSION", "REALIZED_PNL", "FUNDING_FEE", "COMMISSION_REBATE"].includes(
+              i.incomeType,
+            ) &&
             !ledger.feeRates[incomeRateKey(i)],
         )
         .map((i) => [incomeRateKey(i), i]),

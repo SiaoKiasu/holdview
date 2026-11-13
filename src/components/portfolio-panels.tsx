@@ -755,6 +755,12 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
                                           book.commissionValue,
                                           "已实现盈亏",
                                         ],
+                                        [
+                                          "手续费返还",
+                                          book.rebateCoin,
+                                          book.rebateValue,
+                                          "已实现盈亏",
+                                        ],
                                       ].map(([label, qty, value, destination]) => (
                                         <tr key={label!}>
                                           <td>{label}</td>

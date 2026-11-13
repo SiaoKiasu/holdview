@@ -153,7 +153,10 @@ export function trackHedges(data: ProviderData, now: number): Record<string, Hed
       )
         continue;
       seenIncome.add(key);
-      if (!["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"].includes(i.incomeType)) continue;
+      if (
+        !["REALIZED_PNL", "COMMISSION", "FUNDING_FEE", "COMMISSION_REBATE"].includes(i.incomeType)
+      )
+        continue;
       const rate = i.asset === "USDT" ? "1" : futures.ledger.feeRates[minute(i.asset, i.time)];
       if (!rate && !D(i.income).isZero()) {
         valid = false;
@@ -162,7 +165,8 @@ export function trackHedges(data: ProviderData, now: number): Record<string, Hed
       }
       const amount = D(i.income).mul(rate ?? 0);
       if (i.incomeType === "REALIZED_PNL") realized = realized.plus(amount);
-      if (i.incomeType === "COMMISSION") fees = fees.plus(amount);
+      if (i.incomeType === "COMMISSION" || i.incomeType === "COMMISSION_REBATE")
+        fees = fees.plus(amount);
       if (i.incomeType === "FUNDING_FEE") funding = funding.plus(amount);
     }
     let collateralPnl = D(0);
@@ -184,7 +188,10 @@ export function trackHedges(data: ProviderData, now: number): Record<string, Hed
         expectedWallet = expectedWallet.plus(i.income);
         if (
           !D(i.income).isZero() &&
-          (!rate || !["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"].includes(i.incomeType))
+          (!rate ||
+            !["REALIZED_PNL", "COMMISSION", "FUNDING_FEE", "COMMISSION_REBATE"].includes(
+              i.incomeType,
+            ))
         ) {
           valid = false;
           note = "币本位钱包有划转或待核对流水，期间损益暂不可用";

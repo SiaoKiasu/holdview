@@ -11,9 +11,11 @@ export type CoinInventory = {
   realizedCoin: string;
   fundingCoin: string;
   commissionCoin: string;
+  rebateCoin: string;
   realizedValue: string | null;
   fundingValue: string | null;
   commissionValue: string | null;
+  rebateValue: string | null;
   disposalPnl: string | null;
   complete: boolean;
   issues: string[];
@@ -73,9 +75,11 @@ export function coinInventory(data: ProviderData) {
       realized: Decimal;
       funding: Decimal;
       commission: Decimal;
+      rebate: Decimal;
       rv: Decimal;
       fv: Decimal;
       cv: Decimal;
+      rbv: Decimal;
       rates: boolean;
     }
   > = {};
@@ -84,9 +88,11 @@ export function coinInventory(data: ProviderData) {
       realized: D(0),
       funding: D(0),
       commission: D(0),
+      rebate: D(0),
       rv: D(0),
       fv: D(0),
       cv: D(0),
+      rbv: D(0),
       rates: true,
     });
   const timeline = [
@@ -117,7 +123,9 @@ export function coinInventory(data: ProviderData) {
             ? "funding"
             : i.incomeType === "COMMISSION"
               ? "commission"
-              : null;
+              : i.incomeType === "COMMISSION_REBATE"
+                ? "rebate"
+                : null;
       if (!category) {
         p.issues.add(`未核对流水 ${i.incomeType}`);
         continue;
@@ -130,7 +138,14 @@ export function coinInventory(data: ProviderData) {
         continue;
       }
       const value = qty.mul(rate);
-      const valueKey = category === "realized" ? "rv" : category === "funding" ? "fv" : "cv";
+      const valueKey =
+        category === "realized"
+          ? "rv"
+          : category === "funding"
+            ? "fv"
+            : category === "rebate"
+              ? "rbv"
+              : "cv";
       s[valueKey] = s[valueKey].plus(value);
       if (qty.gt(0)) {
         p.qty = p.qty.plus(qty);
@@ -247,9 +262,11 @@ export function coinInventory(data: ProviderData) {
       realizedCoin: s.realized.toString(),
       fundingCoin: s.funding.toString(),
       commissionCoin: s.commission.toString(),
+      rebateCoin: s.rebate.toString(),
       realizedValue: s.rates ? s.rv.toString() : null,
       fundingValue: s.rates ? s.fv.toString() : null,
       commissionValue: s.rates ? s.cv.toString() : null,
+      rebateValue: s.rates ? s.rbv.toString() : null,
       disposalPnl: complete ? p.fx.toString() : null,
     };
   }

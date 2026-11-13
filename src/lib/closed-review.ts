@@ -171,7 +171,12 @@ export function closedReview(
       const p = inventory(i.asset),
         q = D(i.income);
       const rate = data.ledger?.coinFutures?.feeRates[feeRateKey(i.asset, i.time)];
-      if (!["REALIZED_PNL", "FUNDING_FEE", "COMMISSION"].includes(i.incomeType) || !rate) {
+      if (
+        !["REALIZED_PNL", "FUNDING_FEE", "COMMISSION", "COMMISSION_REBATE"].includes(
+          i.incomeType,
+        ) ||
+        !rate
+      ) {
         p.valid = false;
         continue;
       }
