@@ -444,19 +444,9 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
   const spotValue = allSpot.every((h) => h.value !== null)
     ? allSpot.reduce((v, h) => v.plus(h.value!), D(0)).toString()
     : null;
-  const futuresPnl =
-    e.positionsReady && !e.unsupported.length
-      ? positions.reduce((v, a) => v.plus(a.unRealizedProfit), D(0)).toString()
-      : null;
-  const spotPnl = allSpot.filter((h) => !STABLECOINS.has(h.asset));
-  const shownPnl =
-    mode === "futures"
-      ? futuresPnl
-      : mode === "spot"
-        ? spotPnl.every((h) => h.unrealizedPnl !== null)
-          ? spotPnl.reduce((n, h) => n.plus(h.unrealizedPnl!), D(0)).toString()
-          : null
-        : data.summary.unrealizedPnl;
+  // This is the account headline, shared with Overview. Table filters and tabs
+  // must not silently replace it with only spot or selected-contract PnL.
+  const shownPnl = data.summary.unrealizedPnl;
   return (
     <div className="portfolio-upgrade">
       <section className="exposure-strip">
@@ -487,8 +477,8 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
             <small>{mode === "futures" ? "USDT" : "个"}</small>
           </strong>
         </div>
-        <div>
-          <span>{mode === "futures" ? "浮动盈亏 · 当前筛选" : "持仓盈亏"}</span>
+        <div title="账户持仓盈亏 = 币资产盈亏（含保证金币）+ 合约浮动盈亏 + 累计资金费；不随下方筛选变化。">
+          <span>持仓盈亏</span>
           <strong className={tone(shownPnl)}>
             {n(shownPnl, 2, true)}
             <small>USDT</small>

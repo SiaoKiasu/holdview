@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { PortfolioHoldings } from "@/components/portfolio-panels";
 import { OverviewPanel } from "@/components/overview-panel";
 import type { Dashboard, Holding } from "@/lib/types";
 
@@ -134,5 +135,36 @@ describe("overview financial presentation", () => {
     expect(html.indexOf("ASSET3USDT")).toBeLessThan(html.indexOf("ASSET2USDT"));
     expect(html).not.toContain("区间资产变化");
     expect(data).toEqual(before);
+  });
+});
+
+describe("shared account holding PnL", () => {
+  it.each([
+    ["5.1", "+5.10"],
+    ["-2052.98", "−2,052.98"],
+    ["0", "0.00"],
+    [null, "—"],
+  ])(
+    "keeps the holdings headline aligned with overview for %s, including unknown contract data",
+    (pnl, label) => {
+      const data = fixture();
+      // The visible spot subtotal is +20.10. The account value additionally
+      // includes contract PnL and funding; unknown totals must not fall back to spot.
+      data.summary.unrealizedPnl = pnl;
+      const holdings = renderToStaticMarkup(
+        createElement(PortfolioHoldings, { data, hidden: false }),
+      );
+      const headline = holdings.slice(0, holdings.indexOf("</section>"));
+      expect(headline).toContain(`>${label}<small>USDT</small>`);
+      expect(render(data)).toContain(`>${label}<small>USDT</small>`);
+      expect(headline).not.toContain(">+20.10<");
+    },
+  );
+  it("conceals the shared headline in privacy mode", () => {
+    const html = renderToStaticMarkup(
+      createElement(PortfolioHoldings, { data: fixture(), hidden: true }),
+    );
+    expect(html).not.toContain("+5.10");
+    expect(html).toContain("••••");
   });
 });
