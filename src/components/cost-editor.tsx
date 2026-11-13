@@ -21,6 +21,7 @@ export function CostEditor({
   onPendingChange,
   holdings,
   trades,
+  extraAssets = [],
   onSaved,
 }: {
   accountId: string;
@@ -28,6 +29,7 @@ export function CostEditor({
   onPendingChange: (pending: boolean) => void;
   holdings: Holding[];
   trades: Trade[];
+  extraAssets?: string[];
   onSaved: () => Promise<void>;
 }) {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -76,6 +78,7 @@ export function CostEditor({
   const assets = [
     ...new Set([
       ...Object.keys(draft),
+      ...extraAssets,
       ...holdings.map((h) => h.asset),
       ...trades.flatMap((t) => [
         ...(t.symbol.endsWith("USDT") ? [t.symbol.slice(0, -4)] : []),

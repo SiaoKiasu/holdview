@@ -6,12 +6,12 @@ import { BinanceClient } from "./binance";
 import type { Config } from "./config";
 import type { FuturesData, FuturesIncome, FuturesLedger, Trade, Order } from "./types";
 
-const decimal = z.string().regex(/^-?\d+(\.\d+)?$/);
-const transactionId = z.union([
+export const decimal = z.string().regex(/^-?\d+(\.\d+)?$/);
+export const transactionId = z.union([
   z.string().regex(/^\d+$/),
   z.number().int().safe().transform(String),
 ]);
-const incomeSchema = z.array(
+export const incomeSchema = z.array(
   z.object({
     tranId: transactionId,
     tradeId: z.string().optional(),
@@ -90,9 +90,10 @@ export class BinanceFuturesClient extends BinanceClient {
   constructor(
     c: Pick<Config, "BINANCE_ENV" | "BINANCE_API_KEY" | "BINANCE_API_SECRET">,
     transport: typeof fetch = fetch,
-    private until = Date.now() + 25000,
+    protected until = Date.now() + 25000,
+    protected contractMarket: "futures" | "coin" = "futures",
   ) {
-    super(c, transport, until, "futures");
+    super(c, transport, until, contractMarket);
   }
   async loadFutures(previous?: FuturesLedger): Promise<FuturesData> {
     await this.syncTime();
@@ -271,7 +272,11 @@ export class BinanceFuturesClient extends BinanceClient {
     const raw = z
       .array(z.record(z.string(), z.unknown()))
       .parse(
-        await this.request(algo ? "/fapi/v1/openAlgoOrders" : "/fapi/v1/openOrders", {}, true),
+        await this.request(
+          `/${this.contractMarket === "coin" ? "dapi" : "fapi"}/v1/${algo ? "openAlgoOrders" : "openOrders"}`,
+          {},
+          true,
+        ),
       );
     return raw.map((rawOrder) => {
       const o = z
@@ -332,7 +337,7 @@ export class BinanceFuturesClient extends BinanceClient {
       positionSide: t.positionSide,
     }));
   }
-  private async syncTrades(ledger: FuturesLedger, openSymbols: string[], warnings: string[]) {
+  protected async syncTrades(ledger: FuturesLedger, openSymbols: string[], warnings: string[]) {
     const rows = new Map((ledger.trades ?? []).map((t) => [`${t.symbol}:${t.id}`, t]));
     ledger.tradeSync ??= {};
     const symbols = [

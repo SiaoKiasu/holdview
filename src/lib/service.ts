@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import type { Config } from "./config";
 import { BinanceClient } from "./binance";
 import { BinanceFuturesClient } from "./binance-futures";
+import { BinanceCoinFuturesClient } from "./binance-coin-futures";
+import { mergeFutures } from "./futures-merge";
 import { demoData, demoHistory } from "./demo";
 import { STABLECOINS, totalPnl, valueHoldings, resolveEquity } from "./portfolio";
 import { readHistory, saveSnapshot } from "./storage";
@@ -45,20 +47,27 @@ async function provider(c: Config, futuresEnabled = false, force = false): Promi
       } catch {
         storageFailed = true;
       }
-      const [spotResult, futuresResult] = await Promise.allSettled([
+      const [spotResult, futuresResult, coinResult] = await Promise.allSettled([
         new BinanceClient(c).load(c.symbols, stored?.ledger),
         futuresEnabled
           ? new BinanceFuturesClient(c).loadFutures(stored?.ledger.futures)
           : Promise.resolve(undefined),
+        futuresEnabled
+          ? new BinanceCoinFuturesClient(c).loadFutures(stored?.ledger.coinFutures)
+          : Promise.resolve(undefined),
       ]);
       if (spotResult.status === "rejected") throw spotResult.reason;
       const data = spotResult.value;
-      if (futuresResult.status === "fulfilled" && futuresResult.value) {
-        data.futures = futuresResult.value;
+      if (futuresEnabled) {
+        const um = futuresResult.status === "fulfilled" ? futuresResult.value : undefined;
+        const cm = coinResult.status === "fulfilled" ? coinResult.value : undefined;
+        data.futures = mergeFutures(um, cm);
         data.warnings.push(...data.futures.warnings);
-        if (data.ledger) data.ledger.futures = data.futures.ledger;
-      } else if (futuresResult.status === "rejected") {
-        data.warnings.push("合约账户暂未读取成功，请检查当前 API 的合约读取权限与 IP 限制。");
+        if (!um) data.warnings.push("U 本位合约账户暂未读取成功，请检查 API 权限与 IP 限制。");
+        if (data.ledger) {
+          data.ledger.futures = um?.ledger ?? stored?.ledger.futures;
+          data.ledger.coinFutures = cm?.ledger ?? stored?.ledger.coinFutures;
+        }
       }
       data.hedgePeriods = trackHedges(data, Date.now());
       if (data.ledger && !storageFailed) {
@@ -103,6 +112,16 @@ export async function dashboard(
     costStorageFailed = true;
   }
   const accounting = tradeRealizedPnl(data.ledger, data.tradesComplete);
+  const coinWallets = (data.futures?.coinWallets ?? []).map((w) => ({
+    ...w,
+    averageCost: costs[w.asset] ?? null,
+    holdingPnl:
+      costs[w.asset] === undefined
+        ? new Decimal(w.walletBalance).isZero()
+          ? "0"
+          : null
+        : new Decimal(w.walletBalance).mul(new Decimal(w.price).minus(costs[w.asset])).toString(),
+  }));
   const spotHoldings = valueHoldings(data.balances, data.tickers, { ...costs, USDT: "1" });
   const sum = (values: (string | null)[]) =>
     values.reduce<Decimal>((a, v) => a.plus(v ?? 0), new Decimal(0)).toString();
@@ -139,7 +158,9 @@ export async function dashboard(
   const realizedPnlComplete = accounting.complete && (!futuresEnabled || futures.complete);
   const holdingPnl = combine(
     costed.length === nonStableHoldings.length ? sum(costed.map((h) => h.unrealizedPnl)) : null,
-    futures.holdingPnl,
+    futures.holdingPnl === null || coinWallets.some((w) => w.holdingPnl === null)
+      ? null
+      : new Decimal(futures.holdingPnl).plus(sum(coinWallets.map((w) => w.holdingPnl))).toString(),
   );
   let history = demo ? demoHistory(equity) : [];
   let saved = false;
@@ -161,7 +182,12 @@ export async function dashboard(
         ? `${unpriced} 种资产缺少可用行情，持仓明细估值不完整；现货部分使用交易所钱包估值。`
         : `${unpriced} 种资产缺少可用行情，当前总额仅为已估值资产小计，累计盈亏暂停计算。`,
     );
-  const missingCosts = nonStableHoldings.filter((h) => h.averageCost === null).map((h) => h.asset);
+  const missingCosts = [
+    ...new Set([
+      ...nonStableHoldings.filter((h) => h.averageCost === null).map((h) => h.asset),
+      ...coinWallets.filter((w) => w.holdingPnl === null).map((w) => w.asset),
+    ]),
+  ];
   if (costStorageFailed) warnings.push("管理员成本暂时无法读取，未实现盈亏暂停计算，请稍后重试。");
   else if (missingCosts.length)
     warnings.push(
@@ -198,6 +224,7 @@ export async function dashboard(
     updatedAt: time,
     holdings,
     positionDetails: data.futures?.positions ?? [],
+    coinWallets,
     hedgePeriods: data.hedgePeriods ?? {},
     closedReview: review,
     trades: combinedTrades.slice(0, 1000),

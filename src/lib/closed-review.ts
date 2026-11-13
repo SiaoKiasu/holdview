@@ -228,6 +228,72 @@ export function closedReview(data: ProviderData, holdings: Holding[]): ClosedRev
       state.direction = sign;
     } else if (p.qty.isZero()) state.direction = 0;
   }
+  // Inverse contracts match inventory in contracts; entry coin value is harmonic
+  // in price. Realized PnL is supplied by the exchange in the settlement coin.
+  const inverse = new Map<string, { p: Inventory; direction: number; entryCoin: Decimal }>();
+  for (const t of ordered(
+    (data.futures?.trades ?? []).filter((t) => t.contractMarket === "coin"),
+  )) {
+    if (!t.baseAsset || !t.contractSize) continue;
+    const key = `${t.symbol}:${t.positionSide ?? "BOTH"}`;
+    if (!inverse.has(key)) inverse.set(key, { p: empty(), direction: 0, entryCoin: D() });
+    const state = inverse.get(key)!,
+      p = state.p,
+      q = D(t.quantity),
+      size = D(t.contractSize),
+      sign = t.side === "BUY" ? 1 : -1;
+    if (q.lte(0) || D(t.price).lte(0)) continue;
+    const fee = feeValue(t, t.baseAsset, true);
+    const hedgeClose =
+      t.positionSide === "LONG" ? sign < 0 : t.positionSide === "SHORT" ? sign > 0 : false;
+    const closing =
+      hedgeClose ||
+      (state.direction !== 0 && state.direction !== sign) ||
+      (p.qty.isZero() && !D(t.realizedPnl ?? 0).isZero());
+    if (!closing) {
+      open(p, q, q.mul(size), fee, t.time);
+      state.entryCoin = state.entryCoin.plus(q.mul(size).div(t.price));
+      state.direction = sign;
+      continue;
+    }
+    const closed = hedgeClose ? q : p.qty.gt(0) ? Decimal.min(q, p.qty) : q;
+    const matched = p.valid && p.qty.gte(closed) && p.qty.gt(0),
+      portion = matched ? closed.div(p.qty) : D(0);
+    const entryCoin = state.entryCoin.mul(portion),
+      entry = matched && entryCoin.gt(0) ? closed.mul(size).div(entryCoin) : null;
+    const native = D(t.realizedPnl ?? 0),
+      rate =
+        t.realizedPnlAsset === "USDT"
+          ? "1"
+          : data.futures?.ledger.feeRates[feeRateKey(t.realizedPnlAsset ?? t.feeAsset, t.time)];
+    const gross = rate ? native.mul(rate) : native.isZero() ? D(0) : null;
+    const fill = close(p, t, closed, closed, fee?.mul(closed).div(q) ?? null, gross ?? D(0));
+    fill.quantity = (entryCoin.gt(0) ? entryCoin : closed.mul(size).div(t.price)).toString();
+    fill.entryPrice = entry?.toString() ?? null;
+    fill.grossPnl = gross?.toString() ?? null;
+    fill.netPnl = gross !== null && fill.fees !== null ? gross.minus(fill.fees).toString() : null;
+    fill.returnRate =
+      fill.netPnl !== null && fill.cost !== null && D(fill.cost).gt(0)
+        ? D(fill.netPnl).div(fill.cost).mul(100).toString()
+        : null;
+    state.entryCoin = matched ? state.entryCoin.minus(entryCoin) : D(0);
+    record(
+      t.baseAsset,
+      "futures",
+      fill,
+      data.futures?.tradesComplete === true && !data.futures?.ledger.historyGap,
+    );
+    const remainder = q.minus(closed);
+    if (remainder.gt(0) && !hedgeClose) {
+      Object.assign(p, empty());
+      open(p, remainder, remainder.mul(size), fee?.mul(remainder).div(q) ?? null, t.time);
+      state.entryCoin = remainder.mul(size).div(t.price);
+      state.direction = sign;
+    } else if (p.qty.isZero()) {
+      state.direction = 0;
+      state.entryCoin = D(0);
+    }
+  }
   const rows: ClosedReviewRow[] = [...groups]
     .map<ClosedReviewRow>(([id, g]) => {
       const quantity = g.fills.reduce((n, f) => n.plus(f.quantity), D());

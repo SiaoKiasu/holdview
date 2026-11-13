@@ -331,6 +331,7 @@ export function OverviewPanel({
                           : Number(trade.quantity).toLocaleString("en-US", {
                               maximumFractionDigits: 8,
                             })}
+                        {trade.contractMarket === "coin" ? " 张" : ""}
                       </small>
                     </div>
                     <span

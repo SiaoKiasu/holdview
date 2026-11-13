@@ -25,7 +25,12 @@ export async function GET(request: Request) {
             ),
           };
     return Response.json(
-      { ...quotes, spot: filter(quotes.spot), futures: filter(quotes.futures) },
+      {
+        ...quotes,
+        spot: filter(quotes.spot),
+        futures: filter(quotes.futures),
+        coinFutures: filter(quotes.coinFutures ?? null),
+      },
       {
         headers: {
           "Cache-Control": "public, max-age=0, s-maxage=4",

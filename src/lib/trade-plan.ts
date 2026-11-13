@@ -43,6 +43,11 @@ export function projectPlan(
   const positions = new Map<string, Position>();
   for (const h of data.holdings) {
     if (STABLECOINS.has(h.asset) && !h.instrument) continue;
+    if (
+      h.instrument &&
+      data.positionDetails?.some((p) => p.symbol === h.symbol && p.contractMarket === "coin")
+    )
+      continue;
     const key = `${h.instrument ?? "spot"}:${h.symbol ?? h.asset}:${h.direction === "空" ? "short" : "long"}`;
     const q = new D(h.quantity).abs();
     const avg = number(h.averageCost);
@@ -76,7 +81,11 @@ export function projectPlan(
     const qty = new D(remaining(o));
     const selected = choice.enabled;
     const quote = o.quoteAsset ?? (o.symbol.endsWith("USDT") ? "USDT" : "");
-    const supported = quote === "USDT" && !o.closePosition && o.positionSide !== "SHORT";
+    const supported =
+      o.contractMarket !== "coin" &&
+      quote === "USDT" &&
+      !o.closePosition &&
+      o.positionSide !== "SHORT";
     let error = "";
     if (selected && !supported) error = "仅测算 USDT 现货 / 多头固定数量订单";
     else if (selected && o.instrument && data.connection.futuresPositionsComplete === false)
@@ -97,6 +106,7 @@ export function projectPlan(
     }
     if (error) errors.push(`${o.symbol}：${error}`);
     const fill = selected && !error ? qty.mul(percent!).div(100) : new D(0);
+    const face = o.contractMarket === "coin" ? number(o.contractSize) : null;
     return {
       order: o,
       key,
@@ -104,12 +114,21 @@ export function projectPlan(
       remaining: qty.toString(),
       fill: fill.toString(),
       price: price?.toString() ?? null,
-      amount: price ? fill.mul(price).toString() : null,
-      remainingAmount: price ? qty.mul(price).toString() : null,
-      remainingAllocation: price && quote === "USDT" ? ratio(qty.mul(price)) : null,
-      selectedAllocation: price && quote === "USDT" ? ratio(fill.mul(price)) : null,
-      filledAllocation:
-        quote === "USDT"
+      amount: face ? fill.mul(face).toString() : price ? fill.mul(price).toString() : null,
+      remainingAmount: face ? qty.mul(face).toString() : price ? qty.mul(price).toString() : null,
+      remainingAllocation: face
+        ? ratio(qty.mul(face))
+        : price && quote === "USDT"
+          ? ratio(qty.mul(price))
+          : null,
+      selectedAllocation: face
+        ? ratio(fill.mul(face))
+        : price && quote === "USDT"
+          ? ratio(fill.mul(price))
+          : null,
+      filledAllocation: face
+        ? ratio(new D(o.executedQuantity).mul(face))
+        : quote === "USDT"
           ? o.executedQuote !== undefined
             ? ratio(new D(o.executedQuote))
             : new D(o.executedQuantity).isZero()
@@ -218,6 +237,13 @@ export function projectPlan(
   const locked = D.max(0, new D(data.summary.cashLocked).minus(released));
   const free = data.connection.ordersComplete ? cash.minus(locked) : null;
   const notices: string[] = [];
+  if (
+    data.positionDetails?.some((p) => p.contractMarket === "coin") ||
+    orders.some((o) => o.contractMarket === "coin")
+  )
+    notices.push(
+      "币本位挂单按张数和面值展示；当前持仓测算仅包含现货与 U 本位，暂不模拟币本位成交。",
+    );
   for (const h of data.holdings.filter((h) => !h.instrument)) {
     const matching = rows.filter(
       (r) => !r.order.instrument && orderAsset(r.order) === h.asset && r.order.side === "SELL",

@@ -240,7 +240,13 @@ export function TradePlanPanel({ data, hidden }: { data: Dashboard; hidden: bool
                   <td>
                     <strong>{r.order.symbol}</strong>
                     <small>
-                      {r.order.manual ? "手动测算" : r.order.instrument ? "合约挂单" : "现货挂单"}
+                      {r.order.manual
+                        ? "手动测算"
+                        : r.order.contractMarket === "coin"
+                          ? "币本位挂单 · 张"
+                          : r.order.instrument
+                            ? "合约挂单"
+                            : "现货挂单"}
                       {r.order.orderListId ? " · 关联单" : ""}
                     </small>
                     {r.order.manual && (

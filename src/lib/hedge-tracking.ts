@@ -1,11 +1,14 @@
 import Decimal from "decimal.js";
 import { valueHoldings } from "./portfolio";
+import { supportedPosition, positionAsset, incomeIdentity } from "./futures-units";
 import { STABLECOINS } from "./assets";
 import type { ProviderData, TradeLedger } from "./types";
 
 const D = (v: string | number) => new Decimal(v);
 export type HedgeAnchor = {
   startedAt: number;
+  coinWalletQuantity?: string;
+  coinWalletValue?: string;
   spotQuantity: string;
   spotValue: string;
   futuresFloating: string;
@@ -23,7 +26,7 @@ export type HedgePeriod = {
   complete: boolean;
   note: string;
 };
-const incomeId = (i: { incomeType: string; tranId: string }) => `${i.incomeType}:${i.tranId}`;
+const incomeId = incomeIdentity;
 const tradeId = (t: { symbol: string; id: string }) => `${t.symbol}:${t.id}`;
 const minute = (a: string, t: number) => `${a}:${Math.floor(t / 60000) * 60000}`;
 
@@ -37,17 +40,21 @@ export function trackHedges(data: ProviderData, now: number): Record<string, Hed
   const spots = valueHoldings(data.balances, data.tickers, {});
   const assets = new Set(
     futures.positions
-      .filter(
-        (p) => D(p.positionAmt).lt(0) && p.marginAsset === "USDT" && p.symbol.endsWith("USDT"),
-      )
-      .map((p) => p.symbol.slice(0, -4)),
+      .filter((p) => D(p.positionAmt).lt(0) && supportedPosition(p))
+      .map(positionAsset),
   );
   for (const asset of assets) {
     const spotQuantity = spots.find((s) => s.asset === asset)?.quantity ?? "0";
     const longQuantity = futures.positions
-      .filter((p) => p.symbol === `${asset}USDT` && D(p.positionAmt).gt(0))
+      .filter((p) => positionAsset(p) === asset && D(p.positionAmt).gt(0))
       .reduce((v, p) => v.plus(p.positionAmt), D(0));
-    if (D(spotQuantity).plus(longQuantity).lte(0)) assets.delete(asset);
+    if (
+      D(spotQuantity)
+        .plus(longQuantity)
+        .plus(futures.coinWallets?.find((w) => w.asset === asset)?.marginBalance ?? 0)
+        .lte(0)
+    )
+      assets.delete(asset);
   }
   const result: Record<string, HedgePeriod> = {};
   const spotTrades = Object.values(ledger.markets).flatMap((m) => m.trades);
@@ -57,9 +64,15 @@ export function trackHedges(data: ProviderData, now: number): Record<string, Hed
   for (const asset of assets) {
     const s = spots.find((h) => h.asset === asset) ?? { quantity: "0", value: "0" };
     if (s.value === null || STABLECOINS.has(asset)) continue;
-    const ps = futures.positions.filter((p) => p.symbol === `${asset}USDT`);
+    const ps = futures.positions.filter((p) => positionAsset(p) === asset);
+    const wallet = futures.coinWallets?.find((w) => w.asset === asset);
+    const coin = !!wallet || ps.some((p) => p.contractMarket === "coin");
     const floating = ps.reduce((v, p) => v.plus(p.unRealizedProfit), D(0));
     const relevant = Object.values(ledger.markets).filter((m) => m.baseAsset === asset);
+    // Switching collateral model starts a new observable baseline; never combine old UM
+    // spot-only quantities with a newly discovered collateral wallet.
+    if (anchors[asset] && coin !== (anchors[asset].coinWalletQuantity !== undefined))
+      delete anchors[asset];
     const anchor = anchors[asset];
     if (!anchor) {
       // Wait until history is complete so backfilled pre-baseline trades cannot
@@ -67,6 +80,14 @@ export function trackHedges(data: ProviderData, now: number): Record<string, Hed
       if (!data.tradesComplete || !futures.complete) continue;
       anchors[asset] = {
         startedAt: now,
+        ...(coin
+          ? {
+              coinWalletQuantity: wallet?.walletBalance ?? "0",
+              coinWalletValue: D(wallet?.walletBalance ?? 0)
+                .mul(wallet?.price ?? 0)
+                .toString(),
+            }
+          : {}),
         spotQuantity: s.quantity,
         spotValue: s.value,
         futuresFloating: floating.toString(),
@@ -125,7 +146,12 @@ export function trackHedges(data: ProviderData, now: number): Record<string, Hed
     const seenIncome = new Set(a.incomeIds);
     for (const i of futures.ledger.incomes) {
       const key = incomeId(i);
-      if (i.symbol !== `${asset}USDT` || i.time <= a.startedAt || seenIncome.has(key)) continue;
+      if (
+        (i.symbol !== `${asset}USDT` && !(i.contractMarket === "coin" && i.asset === asset)) ||
+        i.time <= a.startedAt ||
+        seenIncome.has(key)
+      )
+        continue;
       seenIncome.add(key);
       if (!["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"].includes(i.incomeType)) continue;
       const rate = i.asset === "USDT" ? "1" : futures.ledger.feeRates[minute(i.asset, i.time)];
@@ -139,7 +165,47 @@ export function trackHedges(data: ProviderData, now: number): Record<string, Hed
       if (i.incomeType === "COMMISSION") fees = fees.plus(amount);
       if (i.incomeType === "FUNDING_FEE") funding = funding.plus(amount);
     }
-    const spotPnl = D(s.value).minus(a.spotValue).plus(cash).plus(baseFees);
+    let collateralPnl = D(0);
+    if (coin) {
+      let expectedWallet = D(a.coinWalletQuantity ?? 0),
+        settledValue = D(0);
+      const seenCoin = new Set(a.incomeIds);
+      for (const i of futures.ledger.incomes) {
+        const key = incomeId(i);
+        if (
+          i.contractMarket !== "coin" ||
+          i.asset !== asset ||
+          i.time <= a.startedAt ||
+          seenCoin.has(key)
+        )
+          continue;
+        seenCoin.add(key);
+        const rate = futures.ledger.feeRates[minute(i.asset, i.time)];
+        expectedWallet = expectedWallet.plus(i.income);
+        if (
+          !D(i.income).isZero() &&
+          (!rate || !["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"].includes(i.incomeType))
+        ) {
+          valid = false;
+          note = "币本位钱包有划转或待核对流水，期间损益暂不可用";
+        }
+        settledValue = settledValue.plus(D(i.income).mul(rate ?? 0));
+      }
+      if (
+        expectedWallet
+          .minus(wallet?.walletBalance ?? 0)
+          .abs()
+          .gt("0.00000001")
+      ) {
+        valid = false;
+        note = "币本位钱包变动与流水未对齐";
+      }
+      collateralPnl = D(wallet?.walletBalance ?? 0)
+        .mul(wallet?.price ?? 0)
+        .minus(a.coinWalletValue ?? 0)
+        .minus(settledValue);
+    }
+    const spotPnl = D(s.value).minus(a.spotValue).plus(cash).plus(baseFees).plus(collateralPnl);
     const futuresPnl = floating.minus(a.futuresFloating).plus(realized);
     result[asset] = {
       startedAt: a.startedAt,

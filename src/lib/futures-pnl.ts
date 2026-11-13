@@ -1,5 +1,12 @@
 import Decimal from "decimal.js";
 import type { FuturesData, Holding } from "./types";
+import {
+  supportedPosition,
+  positionAsset,
+  positionBasis,
+  positionNotional,
+  incomeIdentity,
+} from "./futures-units";
 import { incomeRateKey } from "./binance-futures";
 Decimal.set({ precision: 36 });
 
@@ -26,7 +33,7 @@ export function futuresAccounting(data: FuturesData | undefined) {
   const seen = new Set<string>();
   for (const i of data.ledger.incomes) {
     if (!["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"].includes(i.incomeType)) continue;
-    const key = `${i.incomeType}:${i.tranId}`;
+    const key = incomeIdentity(i);
     if (seen.has(key)) continue;
     seen.add(key);
     const rate = i.asset === "USDT" ? "1" : data.ledger.feeRates[incomeRateKey(i)];
@@ -52,9 +59,7 @@ export function futuresAccounting(data: FuturesData | undefined) {
     ...fundingBySymbol.keys(),
     ...unknownFunding,
   ]);
-  const unsupported = data.positions.some(
-    (p) => p.marginAsset !== "USDT" || !p.symbol.endsWith("USDT"),
-  );
+  const unsupported = data.positions.some((p) => !supportedPosition(p));
   // An unsuccessful initial history read must not look like a confirmed zero.
   const hasIncome = data.complete || data.ledger.incomes.length > 0;
   // Trade details provide a provisional realized subtotal if income history is unavailable.
@@ -66,32 +71,31 @@ export function futuresAccounting(data: FuturesData | undefined) {
         t.feeAsset === "USDT"
           ? "1"
           : data.ledger.feeRates[`${t.feeAsset}:${Math.floor(t.time / 60000) * 60000}`];
-      if (!t.symbol.endsWith("USDT") || (Number(t.fee) !== 0 && !rate)) {
+      const pnlRate =
+        t.contractMarket === "coin"
+          ? data.ledger.feeRates[`${t.realizedPnlAsset}:${Math.floor(t.time / 60000) * 60000}`]
+          : "1";
+      if (
+        (!t.symbol.endsWith("USDT") && t.contractMarket !== "coin") ||
+        (Number(t.fee) !== 0 && !rate) ||
+        (Number(t.realizedPnl) !== 0 && !pnlRate)
+      ) {
         realizedKnown = false;
         continue;
       }
       const charge = new Decimal(t.fee).mul(rate ?? 0);
       fees = fees.minus(charge);
-      realized = realized.plus(t.realizedPnl ?? 0).minus(charge);
+      realized = realized.plus(new Decimal(t.realizedPnl ?? 0).mul(pnlRate ?? 0)).minus(charge);
     }
   }
   const holdings: Holding[] = [...symbols].filter(Boolean).flatMap((symbol) => {
     const ps = data.positions.filter((p) => p.symbol === symbol);
     const fundingAmount = fundingBySymbol.get(symbol) ?? new Decimal(0);
     if (!ps.length && fundingAmount.isZero() && !unknownFunding.has(symbol)) return [];
-    const valid = ps.every(
-      (p) =>
-        p.marginAsset === "USDT" && p.symbol.endsWith("USDT") && new Decimal(p.markPrice).gt(0),
-    );
+    const valid = ps.every((p) => supportedPosition(p) && new Decimal(p.markPrice).gt(0));
     const quantity = ps.reduce((a, p) => a.plus(new Decimal(p.positionAmt).abs()), new Decimal(0));
-    const basis = ps.reduce(
-      (a, p) => a.plus(new Decimal(p.positionAmt).abs().mul(p.entryPrice)),
-      new Decimal(0),
-    );
-    const notional = ps.reduce(
-      (a, p) => a.plus(new Decimal(p.positionAmt).abs().mul(p.markPrice)),
-      new Decimal(0),
-    );
+    const basis = ps.reduce((a, p) => a.plus(positionBasis(p)), new Decimal(0));
+    const notional = ps.reduce((a, p) => a.plus(positionNotional(p)), new Decimal(0));
     const pricePnl = ps.reduce((a, p) => a.plus(p.unRealizedProfit), new Decimal(0));
     const pnl = valid ? pricePnl.plus(fundingAmount) : null;
     const long = ps.some((p) => new Decimal(p.positionAmt).gt(0));
@@ -100,7 +104,11 @@ export function futuresAccounting(data: FuturesData | undefined) {
       {
         instrument: "futures" as const,
         symbol,
-        asset: symbol.endsWith("USDT") ? symbol.slice(0, -4) : symbol,
+        asset: ps[0]
+          ? positionAsset(ps[0])
+          : symbol.endsWith("USDT")
+            ? symbol.slice(0, -4)
+            : symbol.split("USD_")[0],
         direction: !ps.length
           ? ("已平仓" as const)
           : long && short
@@ -111,8 +119,25 @@ export function futuresAccounting(data: FuturesData | undefined) {
         free: quantity.toString(),
         locked: "0",
         quantity: quantity.toString(),
-        price: valid && quantity.gt(0) ? notional.div(quantity).toString() : null,
-        averageCost: quantity.gt(0) ? basis.div(quantity).toString() : null,
+        price:
+          valid && quantity.gt(0)
+            ? ps
+                .reduce(
+                  (v, p) => v.plus(new Decimal(p.positionAmt).abs().mul(p.markPrice)),
+                  new Decimal(0),
+                )
+                .div(quantity)
+                .toString()
+            : null,
+        averageCost: quantity.gt(0)
+          ? ps
+              .reduce(
+                (v, p) => v.plus(new Decimal(p.positionAmt).abs().mul(p.entryPrice)),
+                new Decimal(0),
+              )
+              .div(quantity)
+              .toString()
+          : null,
         value: valid ? notional.toString() : null,
         allocation: 0,
         change24h: null,

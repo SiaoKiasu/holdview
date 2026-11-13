@@ -44,14 +44,14 @@ it("serves only requested public prices, shares requests and refreshes after exp
   expect(data.spot.prices).toEqual({ BTCUSDT: "100" });
   expect(data.futures.prices).toEqual({ BTCUSDT: "101" });
   expect(b.status).toBe(200);
-  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(fetcher).toHaveBeenCalledTimes(3);
   expect(a.headers.get("cache-control")).toContain("s-maxage=4");
   for (const call of fetcher.mock.calls) {
     expect(String(call[0])).not.toContain("private-account");
   }
   vi.advanceTimersByTime(4001);
   await GET(request());
-  expect(fetcher).toHaveBeenCalledTimes(4);
+  expect(fetcher).toHaveBeenCalledTimes(6);
 });
 it("rejects untrusted targets and does not replace a failed market with zero prices", async () => {
   const fetcher = vi.fn(async (url: string) => {

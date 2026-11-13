@@ -2,6 +2,10 @@ export type Source = "demo" | "binance";
 export type Balance = { asset: string; free: string; locked: string };
 export type Ticker = { symbol: string; lastPrice: string; priceChangePercent: string };
 export type Trade = {
+  contractMarket?: "coin";
+  baseAsset?: string;
+  contractSize?: string;
+  realizedPnlAsset?: string;
   instrument?: "futures";
   realizedPnl?: string;
   positionSide?: "BOTH" | "LONG" | "SHORT";
@@ -17,6 +21,8 @@ export type Trade = {
   isMaker: boolean;
 };
 export type Order = {
+  contractMarket?: "coin";
+  contractSize?: string;
   instrument?: "futures";
   baseAsset?: string;
   quoteAsset?: string;
@@ -66,6 +72,7 @@ export type TradeLedger = {
   markets: Record<string, MarketLedger>;
   feeRates?: Record<string, { price: string | null; checkedAt: number }>;
   futures?: FuturesLedger;
+  coinFutures?: FuturesLedger;
 };
 export type HistorySync = { scanned: number; total: number; oldestCheck: number | null };
 export type ProviderData = {
@@ -87,6 +94,7 @@ export type Dashboard = {
   marketUpdatedAt?: number;
   marketComplete?: boolean;
   positionDetails?: FuturesPosition[];
+  coinWallets?: CoinWallet[];
   hedgePeriods?: Record<string, import("./hedge-tracking").HedgePeriod>;
   closedReview: import("./closed-review").ClosedReview;
   source: Source;
@@ -142,6 +150,7 @@ export type Dashboard = {
 };
 
 export type FuturesIncome = {
+  contractMarket?: "coin";
   tradeId?: string;
   tranId: string;
   symbol: string;
@@ -150,7 +159,27 @@ export type FuturesIncome = {
   asset: string;
   time: number;
 };
+export type CoinWallet = {
+  averageCost?: string | null;
+  holdingPnl?: string | null;
+  asset: string;
+  walletBalance: string;
+  marginBalance: string;
+  unrealizedProfit: string;
+  availableBalance: string;
+  initialMargin: string;
+  price: string;
+};
 export type FuturesPosition = {
+  // For inverse contracts positionAmt is base-equivalent quantity at mark; financial
+  // fields below are USDT. Native units remain here for display and repricing.
+  contractMarket?: "coin";
+  baseAsset?: string;
+  contractType?: string;
+  contracts?: string;
+  contractSize?: string;
+  nativeUnrealizedPnl?: string;
+  settlementPrice?: string;
   liquidationPrice?: string;
   initialMargin?: string;
   maintMargin?: string;
@@ -165,6 +194,7 @@ export type FuturesPosition = {
   marginAsset: string;
 };
 export type FuturesLedger = {
+  incomeWindows?: { startTime: number; endTime: number }[];
   trades?: Trade[];
   tradeSync?: Record<
     string,
@@ -178,6 +208,7 @@ export type FuturesLedger = {
   feeRates: Record<string, string>;
 };
 export type FuturesData = {
+  coinWallets?: CoinWallet[];
   orders?: Order[];
   ordersComplete?: boolean;
   account?: {

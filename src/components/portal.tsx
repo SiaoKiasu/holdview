@@ -401,7 +401,11 @@ export function Portal() {
         "时间(UTC)",
       ],
       ...trades.map((t) => [
-        t.instrument === "futures" ? "合约" : "现货",
+        t.contractMarket === "coin"
+          ? "币本位合约（数量为张）"
+          : t.instrument === "futures"
+            ? "U 本位合约"
+            : "现货",
         t.id,
         t.symbol,
         t.side,
@@ -646,6 +650,7 @@ export function Portal() {
                   onPendingChange={setCostPending}
                   holdings={data?.holdings.filter((h) => h.instrument !== "futures") ?? []}
                   trades={data?.trades ?? []}
+                  extraAssets={data?.coinWallets?.map((w) => w.asset) ?? []}
                   onSaved={async () => {
                     const current = ++generation.current;
                     loading.current = false;
@@ -845,9 +850,11 @@ export function Portal() {
                                   </td>
                                   <td className="numeric">
                                     {hidden ? "••••" : number(o.quantity, 8)}
+                                    {o.contractMarket === "coin" && !hidden ? " 张" : ""}
                                   </td>
                                   <td className="numeric">
                                     {hidden ? "••••" : number(o.executedQuantity, 8)}
+                                    {o.contractMarket === "coin" && !hidden ? " 张" : ""}
                                   </td>
                                   <td>
                                     <span className="subtle-tag">
@@ -958,6 +965,7 @@ function TradeTable({ trades, hidden }: { trades: Trade[]; hidden: boolean }) {
                 <strong>{t.symbol}</strong>
                 <small>
                   {t.instrument === "futures" ? "合约 · " : ""}
+                  {t.contractMarket === "coin" ? "币本位 · " : t.instrument ? "U 本位 · " : ""}
                   {t.isMaker ? "Maker" : "Taker"}
                 </small>
               </td>
@@ -968,8 +976,14 @@ function TradeTable({ trades, hidden }: { trades: Trade[]; hidden: boolean }) {
                 </span>
               </td>
               <td className="numeric">{hidden ? "••••" : formatPrice(t.price)}</td>
-              <td className="numeric">{hidden ? "••••" : number(t.quantity, 8)}</td>
-              <td className="numeric">{hidden ? "••••" : number(t.quoteQuantity, 8)}</td>
+              <td className="numeric">
+                {hidden ? "••••" : number(t.quantity, 8)}
+                {t.contractMarket === "coin" && !hidden ? " 张" : ""}
+              </td>
+              <td className="numeric">
+                {hidden ? "••••" : number(t.quoteQuantity, 8)}
+                {t.contractMarket === "coin" && !hidden ? " USD" : ""}
+              </td>
               <td className="numeric">
                 {hidden ? "••••" : number(t.fee, 8)} <small className="inline">{t.feeAsset}</small>
               </td>

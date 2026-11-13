@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import Decimal from "decimal.js";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { buildExposure, type PositionGroup } from "@/lib/exposure";
+import { contractLabel, positionBasis, positionNotional } from "@/lib/futures-units";
 import { assetNames } from "@/lib/asset-names";
 import { formatPrice } from "@/lib/price-format";
 import type { Dashboard, FuturesPosition } from "@/lib/types";
@@ -63,7 +64,7 @@ export function ExposureStrip({ data, hidden }: { data: Dashboard; hidden: boole
       ))}
       {!e.complete && (
         <p className="hedge-inline-note">
-          仓位或行情待补齐，敞口暂不可用{e.unsupported.length ? " · 含非 USDT 合约" : ""}
+          仓位或行情待补齐，敞口暂不可用{e.unsupported.length ? " · 含待换算合约" : ""}
         </p>
       )}
     </section>
@@ -84,6 +85,9 @@ export function PositionSummary({ group: g, hidden }: { group: PositionGroup; hi
         <div>
           <span>现货数量</span>
           <strong>{n(g.spotQuantity, 8)}</strong>
+          {D(g.collateralQuantity).abs().gt(0) && (
+            <small className="collateral-quantity">保证金币 {n(g.collateralQuantity, 8)}</small>
+          )}
         </div>
         <div>
           <span>合约多 / 空</span>
@@ -127,17 +131,45 @@ function PositionLegs({ group: g, hidden }: { group: PositionGroup; hidden: bool
           },
         ]
       : []),
+    ...(D(g.collateralQuantity).abs().gt(0)
+      ? [
+          {
+            id: "collateral",
+            label: "币本位保证金币",
+            short: false,
+            qty: g.collateralWallet?.walletBalance ?? g.collateralQuantity,
+            cost: g.collateralWallet?.averageCost ?? null,
+            mark: g.collateralPrice,
+            value: g.collateralPrice
+              ? D(g.collateralWallet?.walletBalance ?? g.collateralQuantity)
+                  .mul(g.collateralPrice)
+                  .toString()
+              : null,
+            pnl: g.collateralWallet?.holdingPnl ?? null,
+            rate:
+              g.collateralWallet?.averageCost &&
+              D(g.collateralWallet.averageCost).gt(0) &&
+              g.collateralPrice
+                ? D(g.collateralPrice)
+                    .div(g.collateralWallet.averageCost)
+                    .minus(1)
+                    .mul(100)
+                    .toString()
+                : null,
+          },
+        ]
+      : []),
     ...g.positions.map((v) => ({
       id: v.symbol + ":" + v.positionSide,
-      label: "永续 · " + (D(v.positionAmt).lt(0) ? "空" : "多"),
+      label: contractLabel(v) + " · " + (D(v.positionAmt).lt(0) ? "空" : "多"),
       short: D(v.positionAmt).lt(0),
       qty: D(v.positionAmt).abs().toString(),
       cost: v.entryPrice,
       mark: v.markPrice,
-      value: D(v.markPrice).gt(0) ? D(v.positionAmt).abs().mul(v.markPrice).toString() : null,
+      value: D(v.markPrice).gt(0) ? positionNotional(v).toString() : null,
       pnl: v.unRealizedProfit,
       rate: D(v.entryPrice).gt(0)
-        ? D(v.unRealizedProfit).div(D(v.positionAmt).abs().mul(v.entryPrice)).mul(100).toString()
+        ? D(v.unRealizedProfit).div(positionBasis(v)).mul(100).toString()
         : null,
     })),
   ];
@@ -250,8 +282,8 @@ function FuturesHoldingsTable({ groups, hidden }: { groups: PositionGroup[]; hid
             <th>合约</th>
             <th>方向</th>
             <th>持仓数量</th>
-            <th>开仓均价 / U</th>
-            <th>标记价格 / U</th>
+            <th>开仓均价</th>
+            <th>标记价格</th>
             <th>名义金额 / U</th>
             <th>浮动盈亏 / U</th>
             <th aria-label="展开明细" />
@@ -268,7 +300,7 @@ function FuturesHoldingsTable({ groups, hidden }: { groups: PositionGroup[]; hid
                 <Fragment key={g.asset}>
                   {g.positions.map((position, index) => {
                     const quantity = D(position.positionAmt).abs();
-                    const basis = quantity.mul(position.entryPrice);
+                    const basis = positionBasis(position);
                     const rate = basis.gt(0)
                       ? D(position.unRealizedProfit).div(basis).mul(100).toString()
                       : null;
@@ -288,7 +320,10 @@ function FuturesHoldingsTable({ groups, hidden }: { groups: PositionGroup[]; hid
                             <CoinIcon asset={g.asset === "1000PEPE" ? "PEPE" : g.asset} />
                             <span>
                               <strong>{g.asset}</strong>
-                              <small>USDT 永续{g.hedged ? ` · ${g.status}` : ""}</small>
+                              <small>
+                                {contractLabel(position)}
+                                {g.hedged ? ` · ${g.status}` : ""}
+                              </small>
                             </span>
                           </button>
                         </td>
@@ -298,13 +333,30 @@ function FuturesHoldingsTable({ groups, hidden }: { groups: PositionGroup[]; hid
                             {short ? "空头" : "多头"}
                           </span>
                         </td>
-                        <td>{n(quantity.toString(), 8)}</td>
-                        <td>{p(position.entryPrice)}</td>
-                        <td>{p(position.markPrice)}</td>
+                        <td>
+                          {position.contractMarket === "coin" ? (
+                            <>
+                              {n(D(position.contracts!).abs().toString(), 0)} 张
+                              <small>
+                                ≈ {n(quantity.toString(), 8)} {g.asset}
+                              </small>
+                            </>
+                          ) : (
+                            n(quantity.toString(), 8)
+                          )}
+                        </td>
+                        <td>
+                          {p(position.entryPrice)}
+                          <small>{position.contractMarket === "coin" ? "USD" : "USDT"}</small>
+                        </td>
+                        <td>
+                          {p(position.markPrice)}
+                          <small>{position.contractMarket === "coin" ? "USD" : "USDT"}</small>
+                        </td>
                         <td>
                           {n(
                             D(position.markPrice).gt(0)
-                              ? quantity.mul(position.markPrice).toString()
+                              ? positionNotional(position).toString()
                               : null,
                           )}
                         </td>
@@ -379,7 +431,7 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
   const positions = groups.flatMap((g) => g.positions);
   const notional =
     e.positionsReady && !e.unsupported.length
-      ? positions.reduce((v, a) => v.plus(D(a.positionAmt).abs().mul(a.markPrice)), D(0)).toString()
+      ? positions.reduce((v, a) => v.plus(positionNotional(a)), D(0)).toString()
       : null;
   const allSpot = data.holdings.filter((h) => h.instrument !== "futures");
   const spotValue = allSpot.every((h) => h.value !== null)
@@ -474,7 +526,7 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
         )}
         {e.unsupported.length > 0 && (
           <p className="hedge-inline-note">
-            非 USDT 合约尚未纳入：{e.unsupported.map((v) => v.symbol).join("、")}
+            待换算合约尚未纳入：{e.unsupported.map((v) => v.symbol).join("、")}
           </p>
         )}
         {mode === "combined" && (
@@ -519,7 +571,14 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
                           </span>
                         </button>
                       </td>
-                      <td>{n(g.spotQuantity, 8)}</td>
+                      <td>
+                        {n(g.spotQuantity, 8)}
+                        {D(g.collateralQuantity).abs().gt(0) && (
+                          <small className="collateral-quantity">
+                            保证金币 {n(g.collateralQuantity, 8)}
+                          </small>
+                        )}
+                      </td>
                       <td>
                         {e.positionsReady
                           ? `${n(g.longQuantity, 8)} / ${n(g.shortQuantity, 8)}`
@@ -621,6 +680,33 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
           </div>
         )}
       </section>
+      {(data.coinWallets?.length ?? 0) > 0 && (
+        <section className="panel portfolio-cash">
+          <h2>币本位钱包</h2>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>保证金币</th>
+                  <th>钱包余额</th>
+                  <th>账户权益 · 币</th>
+                  <th>权益折算 / USDT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.coinWallets!.map((w) => (
+                  <tr key={w.asset}>
+                    <td>{w.asset}</td>
+                    <td>{n(w.walletBalance, 8)}</td>
+                    <td>{n(w.marginBalance, 8)}</td>
+                    <td>{n(D(w.marginBalance).mul(w.price).toString())}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       <section className="panel portfolio-cash">
         <h2>现金与保证金</h2>
         <div className="hedge-risk-grid">
@@ -737,7 +823,7 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
               <h3>对冲期间损益</h3>
               <div className="hedge-attribution">
                 {[
-                  ["现货损益变化", period?.spotPnl],
+                  ["现货 / 保证金币损益", period?.spotPnl],
                   ["合约损益", period?.futuresPnl],
                   ["资金费净收入", period?.fundingPnl],
                   ["交易手续费", period?.feePnl],

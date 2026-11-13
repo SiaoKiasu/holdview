@@ -1,6 +1,12 @@
+vi.mock("@/lib/binance-coin-futures", () => ({
+  BinanceCoinFuturesClient: class {
+    loadFutures = mocks.coin;
+  },
+}));
 import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   spot: vi.fn(),
+  coin: vi.fn(),
   futures: vi.fn(),
   ledger: vi.fn(),
   save: vi.fn(),
@@ -31,6 +37,19 @@ function setup() {
     ACCOUNT_ID: randomUUID(),
     DATABASE_URL: "postgresql://test.invalid/test",
   };
+  mocks.coin.mockResolvedValue({
+    account: { equity: "0", walletBalance: "0", availableBalance: "0", initialMargin: "0" },
+    coinWallets: [],
+    positions: [],
+    positionsComplete: true,
+    orders: [],
+    ordersComplete: true,
+    trades: [],
+    tradesComplete: true,
+    ledger: { incomes: [], feeRates: {}, startTime: 1, syncedThrough: 2 },
+    complete: true,
+    warnings: [],
+  });
   mocks.ledger.mockResolvedValue(undefined);
   mocks.spot.mockImplementation(async () => ({
     balances: [{ asset: "USDT", free: "850", locked: "0" }],
@@ -189,4 +208,37 @@ describe("spot and futures dashboard", () => {
     await dashboard(c);
     expect(mocks.futures).toHaveBeenCalledOnce();
   });
+});
+
+it("combines spot, UM and CM wallets once and persists separate history cursors", async () => {
+  const c = setup();
+  const cm = await mocks.coin();
+  cm.account = {
+    equity: "200",
+    walletBalance: "200",
+    availableBalance: "100",
+    initialMargin: "100",
+  };
+  cm.coinWallets = [
+    {
+      asset: "BTC",
+      walletBalance: "1",
+      marginBalance: "1",
+      unrealizedProfit: "0",
+      availableBalance: "0.5",
+      initialMargin: "0.5",
+      price: "200",
+    },
+  ];
+  mocks.coin.mockResolvedValue(cm);
+  const d = await dashboard(c, true);
+  expect(d.summary).toMatchObject({
+    equity: "1216",
+    futuresEquity: "366",
+    unrealizedPnl: "112",
+    equityComplete: true,
+  });
+  expect(d.coinWallets![0].holdingPnl).toBe("100");
+  expect(mocks.save.mock.calls[0][1].coinFutures).toEqual(cm.ledger);
+  expect(mocks.save.mock.calls[0][1].futures.incomes).toHaveLength(3);
 });

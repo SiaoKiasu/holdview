@@ -13,6 +13,7 @@ export function useLiveMarket(base: Dashboard | null, enabled: boolean) {
         .filter((h) => h.instrument !== "futures" && h.asset !== "USDT")
         .flatMap((h) => ["USDT", "BTC", "ETH", "USDC"].map((quote) => h.asset + quote)) ?? []),
       ...(base?.positionDetails?.map((p) => p.symbol) ?? []),
+      ...(base?.coinWallets?.map((w) => w.asset + "USDT") ?? []),
       "BTCUSDT",
       "ETHUSDT",
       "USDCUSDT",

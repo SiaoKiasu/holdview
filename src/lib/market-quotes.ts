@@ -25,7 +25,7 @@ export function marketQuotes(environment: "mainnet" | "testnet"): Promise<Market
       if (!response.ok) throw new Error("Market unavailable");
       return response.json();
     };
-    const [spot, futures] = await Promise.allSettled([
+    const [spot, futures, coinFutures] = await Promise.allSettled([
       fetchJson(`${spotHost}/api/v3/ticker/price`).then((raw) => ({
         prices: Object.fromEntries(
           spotSchema
@@ -46,13 +46,31 @@ export function marketQuotes(environment: "mainnet" | "testnet"): Promise<Market
           time: Math.min(...rows.map((p) => p.time)),
         };
       }),
+      fetchJson(
+        `${environment === "mainnet" ? "https://dapi.binance.com" : "https://demo-dapi.binance.com"}/dapi/v1/premiumIndex`,
+      ).then((raw) => {
+        const now = Date.now();
+        const rows = futuresSchema
+          .parse(raw)
+          .filter((p) => Number(p.markPrice) > 0 && p.time > now - 30000 && p.time <= now + 10000);
+        if (!rows.length) throw Error("Stale coin marks");
+        return {
+          prices: Object.fromEntries(rows.map((p) => [p.symbol, p.markPrice])),
+          time: Math.min(...rows.map((p) => p.time)),
+        };
+      }),
     ]);
-    if (spot.status === "rejected" && futures.status === "rejected")
+    if (
+      spot.status === "rejected" &&
+      futures.status === "rejected" &&
+      coinFutures.status === "rejected"
+    )
       throw new Error("Market unavailable");
     return {
       environment,
       spot: spot.status === "fulfilled" ? spot.value : null,
       futures: futures.status === "fulfilled" ? futures.value : null,
+      coinFutures: coinFutures.status === "fulfilled" ? coinFutures.value : null,
     };
   });
 }

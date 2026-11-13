@@ -1,3 +1,22 @@
+vi.mock("@/lib/binance-coin-futures", () => ({
+  BinanceCoinFuturesClient: class {
+    async loadFutures() {
+      return {
+        account: { equity: "0", walletBalance: "0", availableBalance: "0", initialMargin: "0" },
+        coinWallets: [],
+        positions: [],
+        positionsComplete: true,
+        orders: [],
+        ordersComplete: true,
+        trades: [],
+        tradesComplete: true,
+        ledger: { incomes: [], feeRates: {}, startTime: 1, syncedThrough: 2 },
+        complete: true,
+        warnings: [],
+      };
+    }
+  },
+}));
 vi.mock("@/lib/binance-futures", () => ({
   BinanceFuturesClient: class {
     async loadFutures() {

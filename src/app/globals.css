@@ -3919,3 +3919,10 @@ td small.inline {
     padding-bottom: 18px;
   }
 }
+
+.hedge-leg-grid .collateral-quantity {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
