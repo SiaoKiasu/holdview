@@ -3926,3 +3926,126 @@ td small.inline {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* A shared baseline for comparing every hedge without switching cards. */
+.hedge-comparison-panel {
+  overflow: hidden;
+}
+.hedge-comparison-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 26px;
+}
+.hedge-comparison-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.hedge-comparison-heading > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.hedge-comparison-table {
+  min-width: 1180px;
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.hedge-comparison-table th {
+  padding: 14px 18px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+.hedge-comparison-table th:first-child,
+.hedge-comparison-table th:nth-child(2) {
+  text-align: left;
+}
+.hedge-comparison-table > tbody {
+  border-top: 1px solid var(--line);
+}
+.hedge-comparison-table > tbody > .hedge-position-row > td {
+  padding: 24px 18px;
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.hedge-comparison-table > tbody > .hedge-position-row > td.hedge-comparison-asset,
+.hedge-comparison-table > tbody > .hedge-position-row > td.hedge-contract-cell {
+  text-align: left;
+}
+.hedge-comparison-table > tbody:hover > .hedge-position-row {
+  background: #fafbf8;
+}
+.hedge-comparison-table > tbody.is-expanded > .hedge-position-row {
+  background: var(--surface-soft);
+}
+.hedge-comparison-table td small {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.hedge-comparison-table td strong {
+  font-weight: 500;
+}
+.hedge-comparison-asset .futures-asset-button {
+  gap: 10px;
+}
+.hedge-comparison-asset .futures-asset-button > span {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.hedge-comparison-asset .futures-asset-button > svg {
+  color: var(--muted);
+  margin-left: 8px;
+}
+.hedge-comparison-asset .hedge-status {
+  font-size: 10px;
+  padding: 3px 6px;
+}
+.hedge-contract-cell > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.hedge-combination-value {
+  background: #f5f8f440;
+}
+.hedge-combination-value > strong {
+  font-size: 17px;
+}
+.hedge-comparison-table .hedge-comparison-detail-row > td {
+  padding: 0;
+  white-space: normal;
+  text-align: left;
+}
+.hedge-inline-detail {
+  background: #fafbf8;
+  border-top: 1px solid var(--line);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.hedge-inline-detail .overview-panel-heading h2 {
+  font-size: 14px;
+}
+.hedge-inline-detail table {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .hedge-comparison-heading {
+    padding: 20px 16px;
+  }
+  .hedge-comparison-heading > span {
+    display: none;
+  }
+}

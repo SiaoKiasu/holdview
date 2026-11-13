@@ -730,10 +730,9 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
 
 export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean }) {
   const e = buildExposure(data),
-    { n, tone } = presentation(hidden);
+    { n, p, tone } = presentation(hidden);
   const groups = e.groups.filter((g) => g.hedged);
-  const [selected, setSelected] = useState("");
-  const current = groups.find((g) => g.asset === selected) ?? groups[0];
+  const [expandedAssets, setExpandedAssets] = useState<string[]>([]);
   const periods = data.hedgePeriods ?? {};
   const total = (key: "hedgedValue" | "netExposure") =>
     e.complete ? groups.reduce((v, g) => v.plus(g[key] ?? 0), D(0)).toString() : null;
@@ -741,7 +740,6 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
     groups.length && groups.every((g) => periods[g.asset]?.complete)
       ? groups.reduce((v, g) => v.plus(periods[g.asset].netPnl!), D(0)).toString()
       : null;
-  const period = current ? periods[current.asset] : undefined;
   return (
     <div className="portfolio-upgrade">
       <section className="exposure-strip">
@@ -777,79 +775,207 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
       {!e.complete && <div className="notice">仓位或行情数据待补齐，暂不汇总敞口。</div>}
       {groups.length ? (
         <>
-          <div className="hedge-cards">
-            {groups.map((g) => (
-              <button
-                key={g.asset}
-                className={"panel hedge-select " + (current.asset === g.asset ? "active" : "")}
-                aria-pressed={current.asset === g.asset}
-                onClick={() => setSelected(g.asset)}
-              >
-                <PositionSummary group={g} hidden={hidden} />
-                <div className="hedge-ratio-label">
-                  <span>对冲比例</span>
-                  <strong>
-                    {n(g.hedgeRatio)}
-                    {hidden ? "" : "%"}
-                  </strong>
-                </div>
-                <div className="hedge-ratio-track" aria-hidden="true">
-                  <i
-                    style={{
-                      width: hidden ? "0%" : `${Math.min(100, Number(g.hedgeRatio ?? 0))}%`,
-                    }}
-                  />
-                </div>
-              </button>
-            ))}
-          </div>
-          <section className="panel hedge-detail">
-            <div className="overview-panel-heading">
+          <section className="panel hedge-comparison-panel">
+            <div className="hedge-comparison-heading">
               <div>
-                <span className="overview-kicker">HEDGE ATTRIBUTION</span>
-                <h2>{current.asset} 对冲明细</h2>
+                <span className="overview-kicker">HEDGE POSITIONS</span>
+                <h2>
+                  对冲持仓 <span className="count">{groups.length}</span>
+                </h2>
               </div>
-              <div className="hedge-start">
-                <span>开始记录</span>
-                <strong>
-                  {period
-                    ? new Date(period.startedAt).toLocaleString("zh-CN", { hour12: false })
-                    : "等待完整数据"}
-                </strong>
-              </div>
+              <span>盈亏 / 敞口 · USDT</span>
             </div>
-            <PositionLegs group={current} hidden={hidden} />
-            <div className="hedge-section">
-              <h3>对冲期间损益</h3>
-              <div className="hedge-attribution">
-                {[
-                  ["现货 / 保证金币损益", period?.spotPnl],
-                  ["合约损益", period?.futuresPnl],
-                  ["资金费净收入", period?.fundingPnl],
-                  ["交易手续费", period?.feePnl],
-                  ["组合净损益", period?.netPnl],
-                ].map(([label, value], i) => (
-                  <div className={i === 4 ? "total" : ""} key={label}>
-                    <span>{label}</span>
-                    <strong className={tone(value)}>{n(value, 2, true)}</strong>
-                  </div>
-                ))}
-              </div>
-              <p className="hedge-inline-note">
-                {period?.note ||
-                  (period
-                    ? "从首次完整记录起计算，包含期间交易；不回溯此前盈亏。"
-                    : "完整成交与资金流水同步后开始记录。历史开仓前后的损益不作推算。")}
-              </p>
-            </div>
-            <div className="hedge-section">
-              <div className="overview-panel-heading">
-                <h3>合约保证金</h3>
-                <span className="hedge-available">
-                  账户可用 {n(data.summary.futuresAvailable)} USDT
-                </span>
-              </div>
-              <FuturesRisk positions={current.positions} hidden={hidden} />
+            <div className="table-scroll">
+              <table className="hedge-comparison-table">
+                <thead>
+                  <tr>
+                    <th>标的 / 状态</th>
+                    <th>合约仓位</th>
+                    <th>入场价格</th>
+                    <th>标记价格</th>
+                    <th>强平价格</th>
+                    <th>合约浮动盈亏</th>
+                    <th>组合持仓盈亏</th>
+                    <th>对冲比例 / 净敞口</th>
+                  </tr>
+                </thead>
+                {groups.map((g) => {
+                  const expanded = expandedAssets.includes(g.asset);
+                  const period = periods[g.asset];
+                  return (
+                    <tbody key={g.asset} className={expanded ? "is-expanded" : ""}>
+                      {g.positions.map((v, index) => {
+                        const short = D(v.positionAmt).lt(0);
+                        const liq =
+                          v.liquidationPrice && D(v.liquidationPrice).gt(0)
+                            ? v.liquidationPrice
+                            : null;
+                        const distance =
+                          liq && D(v.markPrice).gt(0)
+                            ? D(liq)
+                                .minus(v.markPrice)
+                                .mul(short ? 1 : -1)
+                                .div(v.markPrice)
+                                .mul(100)
+                                .toString()
+                            : null;
+                        const unit = v.contractMarket === "coin" ? "USD" : "USDT";
+                        return (
+                          <tr key={v.symbol + ":" + v.positionSide} className="hedge-position-row">
+                            {index === 0 && (
+                              <td rowSpan={g.positions.length} className="hedge-comparison-asset">
+                                <button
+                                  className="futures-asset-button"
+                                  aria-label={`${g.asset} 对冲明细`}
+                                  aria-expanded={expanded}
+                                  onClick={() =>
+                                    setExpandedAssets((prev) =>
+                                      expanded
+                                        ? prev.filter((a) => a !== g.asset)
+                                        : [...prev, g.asset],
+                                    )
+                                  }
+                                >
+                                  <CoinIcon asset={g.asset} />
+                                  <span>
+                                    <strong>{g.asset}</strong>
+                                    <HedgeStatus group={g} />
+                                  </span>
+                                  {expanded ? (
+                                    <ChevronDown size={15} />
+                                  ) : (
+                                    <ChevronRight size={15} />
+                                  )}
+                                </button>
+                              </td>
+                            )}
+                            <td className="hedge-contract-cell">
+                              <div>
+                                <span className={`futures-direction ${short ? "short" : "long"}`}>
+                                  {short ? "空" : "多"}
+                                </span>
+                                <strong>{contractLabel(v)}</strong>
+                              </div>
+                              <small>{v.symbol}</small>
+                              <small>
+                                {v.contractMarket === "coin"
+                                  ? `${n(D(v.contracts!).abs().toString(), 0)} 张 · `
+                                  : ""}
+                                {n(D(v.positionAmt).abs().toString(), 6)} {g.asset}
+                              </small>
+                            </td>
+                            <td>
+                              {p(v.entryPrice)}
+                              <small>{unit}</small>
+                            </td>
+                            <td>
+                              {p(v.markPrice)}
+                              <small>{unit}</small>
+                            </td>
+                            <td>
+                              {p(liq)}
+                              <small>
+                                {distance !== null
+                                  ? `距离 ${n(distance)}${hidden ? "" : "%"}`
+                                  : "—"}
+                              </small>
+                            </td>
+                            <td>
+                              <strong className={tone(v.unRealizedProfit)}>
+                                {n(v.unRealizedProfit, 2, true)}
+                              </strong>
+                              <small>
+                                {v.marginType === "isolated"
+                                  ? "逐仓"
+                                  : v.marginType === "cross"
+                                    ? "全仓"
+                                    : "—"}
+                              </small>
+                            </td>
+                            {index === 0 && (
+                              <>
+                                <td
+                                  rowSpan={g.positions.length}
+                                  className="hedge-combination-value"
+                                >
+                                  <strong className={tone(g.holdingPnl)}>
+                                    {n(g.holdingPnl, 2, true)}
+                                  </strong>
+                                  <small>{g.pnlComplete ? "含资金费" : "暂计"}</small>
+                                </td>
+                                <td rowSpan={g.positions.length}>
+                                  <strong>
+                                    {n(g.hedgeRatio)}
+                                    {hidden || g.hedgeRatio === null ? "" : "%"}
+                                  </strong>
+                                  <small>净敞口 {n(g.netExposure, 2, true)}</small>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })}
+                      {expanded && (
+                        <tr className="hedge-comparison-detail-row">
+                          <td colSpan={8}>
+                            <div className="hedge-detail hedge-inline-detail">
+                              <div className="overview-panel-heading">
+                                <div>
+                                  <span className="overview-kicker">HEDGE ATTRIBUTION</span>
+                                  <h2>{g.asset} 对冲明细</h2>
+                                </div>
+                                <div className="hedge-start">
+                                  <span>开始记录</span>
+                                  <strong>
+                                    {period
+                                      ? new Date(period.startedAt).toLocaleString("zh-CN", {
+                                          hour12: false,
+                                        })
+                                      : "等待完整数据"}
+                                  </strong>
+                                </div>
+                              </div>
+                              <PositionLegs group={g} hidden={hidden} />
+                              <div className="hedge-section">
+                                <h3>对冲期间损益</h3>
+                                <div className="hedge-attribution">
+                                  {[
+                                    ["现货 / 保证金币损益", period?.spotPnl],
+                                    ["合约损益", period?.futuresPnl],
+                                    ["资金费净收入", period?.fundingPnl],
+                                    ["交易手续费", period?.feePnl],
+                                    ["组合净损益", period?.netPnl],
+                                  ].map(([label, value], i) => (
+                                    <div className={i === 4 ? "total" : ""} key={label}>
+                                      <span>{label}</span>
+                                      <strong className={tone(value)}>{n(value, 2, true)}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                                <p className="hedge-inline-note">
+                                  {period?.note ||
+                                    (period
+                                      ? "从首次完整记录起计算，包含期间交易；不回溯此前盈亏。"
+                                      : "完整成交与资金流水同步后开始记录。历史开仓前后的损益不作推算。")}
+                                </p>
+                              </div>
+                              <div className="hedge-section">
+                                <div className="overview-panel-heading">
+                                  <h3>合约保证金</h3>
+                                  <span className="hedge-available">
+                                    账户可用 {n(data.summary.futuresAvailable)} USDT
+                                  </span>
+                                </div>
+                                <FuturesRisk positions={g.positions} hidden={hidden} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  );
+                })}
+              </table>
             </div>
           </section>
         </>
