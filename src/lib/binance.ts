@@ -84,9 +84,10 @@ export class BinanceClient {
     let data: unknown;
     try {
       data =
-        this.market === "futures"
+        this.market !== "spot"
           ? JSON.parse(await response.text(), (key, value, context?: { source: string }) =>
-              ["id", "orderId", "tranId", "algoId"].includes(key) && typeof value === "number"
+              ["id", "orderId", "tranId", "algoId", "tradeId"].includes(key) &&
+              typeof value === "number"
                 ? (context?.source ?? String(value))
                 : value,
             )

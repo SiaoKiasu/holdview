@@ -187,6 +187,48 @@ function dashboard(cm: FuturesData): Dashboard {
   };
 }
 describe("COIN-M integration", () => {
+  it("preserves adjacent 64-bit CM income IDs and numeric trade IDs without rounding or dropping history", async () => {
+    const fallback = transport();
+    const wire: typeof fetch = async (input, init) => {
+      if (new URL(String(input)).pathname === "/dapi/v1/income") {
+        return new Response(
+          '[{"tranId":9007199254740992,"tradeId":9007199254740994,"symbol":"BTCUSD_PERP","incomeType":"COMMISSION","income":"-0.00001","asset":"BTC","time":' +
+            eventTime +
+            '},{"tranId":9007199254740993,"tradeId":9007199254740995,"symbol":"BTCUSD_PERP","incomeType":"COMMISSION","income":"-0.00002","asset":"BTC","time":' +
+            eventTime +
+            "}]",
+        );
+      }
+      return fallback(input, init);
+    };
+    const cm = await new BinanceCoinFuturesClient(config, wire).loadFutures();
+    expect(cm.complete).toBe(true);
+    expect(cm.ledger.incomes.map((i) => i.tranId)).toEqual([
+      "9007199254740992",
+      "9007199254740993",
+    ]);
+    expect(cm.ledger.incomes.map((i) => i.tradeId)).toEqual([
+      "9007199254740994",
+      "9007199254740995",
+    ]);
+    expect(futuresAccounting(cm).feePnl).toBe("-1.5");
+    expect(cm.warnings.some((w) => w.includes("流水读取失败"))).toBe(false);
+  });
+  it("recognizes a coin-wallet-only long hedged by a COIN-M short after spot was transferred out", async () => {
+    const cm = await fixture();
+    const d = dashboard(cm);
+    d.holdings = d.holdings.filter((h) => h.instrument === "futures");
+    const e = buildExposure(d);
+    const btc = e.groups.find((g) => g.asset === "BTC")!;
+    expect(e.complete).toBe(true);
+    expect(e.unsupported).toEqual([]);
+    expect(btc.hedged).toBe(true);
+    expect(btc.shortQuantity).toBe("0.2");
+    expect(btc.collateralQuantity).toBe("0.1");
+    expect(btc.hedgeRatio).toBe("200");
+    expect(btc.netExposure).toBe("-5000");
+  });
+
   it("reads only GETs, derives coin quantities from exchange face size, preserves native units and accounts once", async () => {
     const cm = await fixture();
     expect(cm.account).toEqual({

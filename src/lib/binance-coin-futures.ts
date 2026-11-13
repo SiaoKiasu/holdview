@@ -8,6 +8,7 @@ import {
   transactionId,
   incomeSchema,
   incomeRateKey,
+  futuresErrorReason,
 } from "./binance-futures";
 import { incomeIdentity } from "./futures-units";
 import type { Config } from "./config";
@@ -282,8 +283,8 @@ export class BinanceCoinFuturesClient extends BinanceFuturesClient {
       historyComplete = false;
     try {
       recentComplete = await walk([{ startTime: now - 7 * DAY, endTime: now }], 3);
-    } catch {
-      warnings.push("币本位最新资金流水读取失败。");
+    } catch (error) {
+      warnings.push(`币本位最新资金流水读取失败：${futuresErrorReason(error)}`);
     }
     if (ledger.syncedThrough && ledger.syncedThrough < now - 365 * DAY) ledger.historyGap = true;
     ledger.incomeWindows ??= [
@@ -296,8 +297,8 @@ export class BinanceCoinFuturesClient extends BinanceFuturesClient {
         ledger.syncedThrough = historyEnd;
         delete ledger.incomeWindows;
       }
-    } catch {
-      warnings.push("币本位历史流水同步中断，将继续补齐。");
+    } catch (error) {
+      warnings.push(`币本位历史流水同步中断：${futuresErrorReason(error)}，将继续补齐。`);
     }
     ledger.incomes = [...incomes.values()].sort((a, b) => a.time - b.time);
     const tradesComplete = await this.syncTrades(

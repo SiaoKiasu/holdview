@@ -152,7 +152,7 @@ export function futuresAccounting(data: FuturesData | undefined) {
   const warnings: string[] = [];
   if (missingRates.size)
     warnings.push(`合约盈亏等待手续费或资金费历史汇率：${[...missingRates].join("、")}。`);
-  if (unsupported) warnings.push("存在非 USDT 保证金合约，该部分盈亏尚不支持按 USDT 汇总。");
+  if (unsupported) warnings.push("部分合约缺少规格或折算行情，该部分盈亏待补齐。");
   return {
     holdings,
     realizedPnl: hasRealized && realizedKnown && !unsupported ? realized.toString() : null,

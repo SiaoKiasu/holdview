@@ -75,7 +75,7 @@ const tradesSchema = z.array(
     positionSide: z.enum(["BOTH", "LONG", "SHORT"]).optional(),
   }),
 );
-function reason(error: unknown) {
+export function futuresErrorReason(error: unknown) {
   if (error instanceof AppError) return error.message;
   if (error instanceof z.ZodError)
     return `返回字段格式异常（${error.issues[0]?.path.join(".") ?? "未知字段"}）`;
@@ -125,7 +125,8 @@ export class BinanceFuturesClient extends BinanceClient {
       [ordersResult, "合约挂单"],
       [algoResult, "合约条件单"],
     ] as const)
-      if (result.status === "rejected") warnings.push(label + "读取失败：" + reason(result.reason));
+      if (result.status === "rejected")
+        warnings.push(label + "读取失败：" + futuresErrorReason(result.reason));
     const account = accountResult.status === "fulfilled" ? accountResult.value : undefined;
     const positions = positionResult.status === "fulfilled" ? positionResult.value : [];
     for (const p of positions) {
@@ -136,9 +137,9 @@ export class BinanceFuturesClient extends BinanceClient {
       else if (p.isolatedWallet && new Decimal(p.isolatedWallet).gt(0)) p.marginType = "isolated";
     }
     if (accountResult.status === "rejected")
-      warnings.push(`合约账户权益读取失败：${reason(accountResult.reason)}`);
+      warnings.push(`合约账户权益读取失败：${futuresErrorReason(accountResult.reason)}`);
     if (positionResult.status === "rejected")
-      warnings.push(`合约持仓读取失败：${reason(positionResult.reason)}`);
+      warnings.push(`合约持仓读取失败：${futuresErrorReason(positionResult.reason)}`);
     const now = Date.now();
     const ledger: FuturesLedger = structuredClone(
       previous ?? {
@@ -178,7 +179,7 @@ export class BinanceFuturesClient extends BinanceClient {
       if (!recentComplete) warnings.push("合约近期流水较多，正在继续同步。");
     } catch (e) {
       recentComplete = false;
-      warnings.push(`合约最新资金流水读取失败：${reason(e)}`);
+      warnings.push(`合约最新资金流水读取失败：${futuresErrorReason(e)}`);
     }
     ledger.incomes = [...incomes.values()];
     // Fetch fills alongside backfill so slow historical income cannot hide recent trades.
@@ -210,7 +211,7 @@ export class BinanceFuturesClient extends BinanceClient {
         window.page++;
       }
     } catch (e) {
-      warnings.push(`合约历史流水同步中断：${reason(e)}`);
+      warnings.push(`合约历史流水同步中断：${futuresErrorReason(e)}`);
     }
     ledger.incomes = [...incomes.values()].sort((a, b) => a.time - b.time);
     // Preserve fees in their original currency; convert third-token fees at event-time prices.
@@ -399,7 +400,7 @@ export class BinanceFuturesClient extends BinanceClient {
         complete &&= sync.complete;
       } catch (e) {
         complete = false;
-        warnings.push(`合约 ${symbol} 成交读取失败：${reason(e)}`);
+        warnings.push(`合约 ${symbol} 成交读取失败：${futuresErrorReason(e)}`);
       }
     }
     ledger.trades = [...rows.values()].sort((a, b) => b.time - a.time);
