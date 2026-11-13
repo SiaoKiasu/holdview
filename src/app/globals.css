@@ -4049,3 +4049,77 @@ td small.inline {
     display: none;
   }
 }
+
+.coin-location-tag {
+  color: var(--green, #39604f);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+.futures-asset-button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.coin-inventory-detail {
+  padding: 24px 28px;
+  background: #f8faf8;
+  border: 1px solid #e2e8e2;
+  border-radius: 8px;
+}
+.coin-inventory-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.coin-inventory-heading h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.coin-inventory-heading > span,
+.coin-inventory-footer {
+  font-size: 12px;
+  color: #738278;
+}
+.coin-inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.coin-inventory-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.coin-inventory-grid span {
+  color: #738278;
+  font-size: 12px;
+}
+.coin-inventory-grid strong {
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.coin-settlement-table {
+  border-top: 1px solid #e2e8e2;
+}
+.coin-settlement-table table {
+  min-width: 580px;
+}
+.coin-settlement-table th,
+.coin-settlement-table td {
+  padding: 12px 16px;
+}
+.coin-inventory-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 18px;
+}
+@media (max-width: 800px) {
+  .coin-inventory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

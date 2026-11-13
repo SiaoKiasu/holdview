@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import type { Dashboard, Order } from "./types";
+import { physicalHoldings } from "./physical-holdings";
 import { STABLECOINS } from "./assets";
 
 const D = Decimal.clone({ precision: 36 });
@@ -34,6 +35,7 @@ export function projectPlan(
     short: boolean;
     currentQuantity: Decimal;
     quantity: Decimal;
+    sellable: Decimal;
     currentCost: Decimal | null;
     cost: Decimal | null;
     mark: Decimal | null;
@@ -41,7 +43,10 @@ export function projectPlan(
     sell: Decimal;
   };
   const positions = new Map<string, Position>();
-  for (const h of data.holdings) {
+  for (const h of [
+    ...physicalHoldings(data),
+    ...data.holdings.filter((h) => h.instrument === "futures"),
+  ]) {
     if (STABLECOINS.has(h.asset) && !h.instrument) continue;
     if (
       h.instrument &&
@@ -58,6 +63,7 @@ export function projectPlan(
       short: h.direction === "空",
       currentQuantity: q,
       quantity: q,
+      sellable: h.instrument ? q : new D(h.free).plus(h.locked),
       currentCost: avg === null ? null : q.mul(avg),
       cost: avg === null ? null : q.mul(avg),
       mark: number(h.price),
@@ -165,6 +171,7 @@ export function projectPlan(
         short: false,
         currentQuantity: new D(0),
         quantity: new D(0),
+        sellable: new D(0),
         currentCost: new D(0),
         cost: new D(0),
         mark: null,
@@ -179,13 +186,14 @@ export function projectPlan(
       errors.push(`${o.symbol}：减仓买单不能按多头加仓测算`);
       continue;
     }
-    if (o.side === "SELL" && qty.gt(p.quantity)) {
-      errors.push(`${o.symbol}：卖出数量超过测算持仓`);
+    if (o.side === "SELL" && qty.gt(p.sellable)) {
+      errors.push(`${o.symbol}：卖出数量超过可用测算持仓（保证金币未划回现货）`);
       continue;
     }
     fees = fees.plus(commission);
     if (o.side === "BUY") {
       p.quantity = p.quantity.plus(qty);
+      p.sellable = p.sellable.plus(qty);
       p.cost = p.cost?.plus(amount) ?? null;
       p.buy = p.buy.plus(amount);
       buy = buy.plus(amount);
@@ -197,6 +205,7 @@ export function projectPlan(
     } else {
       const basis = p.cost !== null && p.quantity.gt(0) ? p.cost.div(p.quantity).mul(qty) : null;
       p.quantity = p.quantity.minus(qty);
+      p.sellable = p.sellable.minus(qty);
       p.cost = p.quantity.isZero()
         ? new D(0)
         : p.cost !== null && basis !== null

@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 import type { ProviderData, Holding, Trade } from "./types";
 import { feeRateKey } from "./trade-pnl";
+import { incomeIdentity } from "./futures-units";
 import { STABLECOINS } from "./assets";
 
 Decimal.set({ precision: 36 });
@@ -58,7 +59,11 @@ const ordered = (trades: Trade[]) =>
 
 // Separate analytical view: allocate entry commissions only to closed units. This does not
 // alter the dashboard's cash-flow accounting (which expenses commissions when incurred).
-export function closedReview(data: ProviderData, holdings: Holding[]): ClosedReview {
+export function closedReview(
+  data: ProviderData,
+  holdings: Holding[],
+  coinBooks: Record<string, import("./coin-inventory").CoinInventory> = {},
+): ClosedReview {
   const groups = new Map<
     string,
     { asset: string; market: "spot" | "futures"; fills: ClosingFill[]; complete: boolean }
@@ -142,7 +147,37 @@ export function closedReview(data: ProviderData, holdings: Holding[]): ClosedRev
   };
   const metadata = new Map(Object.entries(data.ledger?.markets ?? {}));
   const trades = ordered([...metadata.values()].flatMap((m) => m.trades));
+  const native = [
+    ...new Map(
+      (data.ledger?.coinFutures?.incomes ?? []).map((i) => [incomeIdentity(i), i]),
+    ).values(),
+  ].sort((a, b) => a.time - b.time || incomeIdentity(a).localeCompare(incomeIdentity(b)));
+  let cursor = 0;
+  const spend = (p: Inventory, qty: Decimal) => {
+    if (p.qty.lt(qty) || p.qty.lte(0)) {
+      p.valid = false;
+      return;
+    }
+    const ratio = D(1).minus(qty.div(p.qty));
+    p.qty = p.qty.minus(qty);
+    p.cost = p.cost.mul(ratio);
+    p.fees = p.fees?.mul(ratio) ?? null;
+    p.weightedTime = p.weightedTime.mul(ratio);
+  };
   for (const t of trades) {
+    while (cursor < native.length && native[cursor].time < t.time) {
+      const i = native[cursor++];
+      if (!coinBooks[i.asset] || i.incomeType === "TRANSFER" || D(i.income).isZero()) continue;
+      const p = inventory(i.asset),
+        q = D(i.income);
+      const rate = data.ledger?.coinFutures?.feeRates[feeRateKey(i.asset, i.time)];
+      if (!["REALIZED_PNL", "FUNDING_FEE", "COMMISSION"].includes(i.incomeType) || !rate) {
+        p.valid = false;
+        continue;
+      }
+      if (q.gt(0)) open(p, q, q.mul(rate), D(0), i.time);
+      else spend(p, q.negated());
+    }
     const m = metadata.get(t.symbol)!;
     if (m.quoteAsset !== "USDT") {
       inventory(m.baseAsset).valid = false;
@@ -160,11 +195,30 @@ export function closedReview(data: ProviderData, holdings: Holding[]): ClosedRev
         p.valid = false;
         continue;
       }
-      open(p, q.minus(baseFee), quote.minus(baseFeeValue), fee, t.time);
+      if (coinBooks[m.baseAsset]) {
+        open(p, q, quote, D(0), t.time);
+        if (baseFee.gt(0)) spend(p, baseFee);
+        p.fees = add(p.fees, fee);
+      } else open(p, q.minus(baseFee), quote.minus(baseFeeValue), fee, t.time);
     } else {
       const fill = close(p, t, q, q.plus(baseFee), fee, undefined, baseFeeValue);
+      if (coinBooks[m.baseAsset] && !coinBooks[m.baseAsset].complete) {
+        fill.entryPrice =
+          fill.cost =
+          fill.grossPnl =
+          fill.fees =
+          fill.netPnl =
+          fill.returnRate =
+            null;
+        fill.holdingMs = null;
+      }
       if (!STABLECOINS.has(m.baseAsset))
-        record(m.baseAsset, "spot", fill, data.tradesComplete && m.complete);
+        record(
+          m.baseAsset,
+          "spot",
+          fill,
+          data.tradesComplete && m.complete && (coinBooks[m.baseAsset]?.complete ?? true),
+        );
     }
     // Commission paid in a third token also consumes its inventory, without a sale.
     if (t.feeAsset !== m.baseAsset && t.feeAsset !== "USDT" && D(t.fee).gt(0)) {

@@ -10,6 +10,7 @@ import {
   incomeRateKey,
   futuresErrorReason,
 } from "./binance-futures";
+import { syncCoinTransfers } from "./coin-transfers";
 import { incomeIdentity } from "./futures-units";
 import type { Config } from "./config";
 import type {
@@ -240,6 +241,10 @@ export class BinanceCoinFuturesClient extends BinanceFuturesClient {
     const ledger: FuturesLedger = structuredClone(
       previous ?? { incomes: [], startTime: now - 89 * DAY, syncedThrough: 0, feeRates: {} },
     );
+    const transfersPending =
+      coinWallets.length || ledger.incomes.length
+        ? syncCoinTransfers(this.spot, ledger.transfers, ledger.startTime, now, this.until)
+        : Promise.resolve(undefined);
     const incomes = new Map(ledger.incomes.map((i) => [incomeIdentity(i), i]));
     const readWindow = async (w: { startTime: number; endTime: number }) => {
       const rows = incomeSchema.parse(
@@ -345,6 +350,9 @@ export class BinanceCoinFuturesClient extends BinanceFuturesClient {
         /* Missing rates remain unknown and are retried next account sync. */
       }
     }
+    ledger.transfers = await transfersPending;
+    if (ledger.transfers && !ledger.transfers.complete)
+      warnings.push("币本位划转记录待补齐，币资产成本暂不可核对。");
     if (!recentComplete || !historyComplete || ledger.historyGap)
       warnings.push("币本位历史流水同步中，盈亏为已读取流水的暂计值。");
     return {

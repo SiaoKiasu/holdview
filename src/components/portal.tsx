@@ -651,6 +651,7 @@ export function Portal() {
                   holdings={data?.holdings.filter((h) => h.instrument !== "futures") ?? []}
                   trades={data?.trades ?? []}
                   extraAssets={data?.coinWallets?.map((w) => w.asset) ?? []}
+                  coinInventory={data?.coinInventory}
                   onSaved={async () => {
                     const current = ++generation.current;
                     loading.current = false;

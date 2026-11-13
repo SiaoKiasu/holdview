@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { assetSymbolPattern } from "@/lib/asset-symbol.mjs";
 import type { Holding, Trade } from "@/lib/types";
+import { formatPrice } from "@/lib/price-format";
 import type { CostSettings } from "@/lib/cost-schema";
 
 type Settings = CostSettings & { writable: boolean };
@@ -22,6 +23,7 @@ export function CostEditor({
   holdings,
   trades,
   extraAssets = [],
+  coinInventory = {},
   onSaved,
 }: {
   accountId: string;
@@ -30,6 +32,7 @@ export function CostEditor({
   holdings: Holding[];
   trades: Trade[];
   extraAssets?: string[];
+  coinInventory?: Record<string, import("@/lib/coin-inventory").CoinInventory>;
   onSaved: () => Promise<void>;
 }) {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -156,10 +159,18 @@ export function CostEditor({
                   inputMode="decimal"
                   type="text"
                   maxLength={37}
-                  placeholder="尚未设置"
-                  value={draft[a] ?? ""}
+                  readOnly={a in coinInventory}
+                  placeholder={a in coinInventory ? "账本待核对" : "尚未设置"}
+                  value={
+                    a in coinInventory
+                      ? coinInventory[a].averageCost === null
+                        ? ""
+                        : formatPrice(coinInventory[a].averageCost)
+                      : (draft[a] ?? "")
+                  }
                   onChange={(e) => setDraft((v) => ({ ...v, [a]: e.target.value }))}
                 />
+                {a in coinInventory && <small>跨钱包账本均价 · 按成交与结算自动更新</small>}
               </label>
             ))}
           </div>

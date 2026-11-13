@@ -38,7 +38,9 @@ function transport(override?: (u: URL) => unknown) {
     const u = new URL(String(input));
     expect(init?.method).toBe("GET");
     const privatePath =
-      /\/(account|positionRisk|income|userTrades|openOrders|openAlgoOrders)$/.test(u.pathname);
+      /\/(account|positionRisk|income|userTrades|openOrders|openAlgoOrders|transfer)$/.test(
+        u.pathname,
+      );
     if (privatePath) {
       expect(u.searchParams.has("signature")).toBe(true);
       expect((init?.headers as Record<string, string>)["X-MBX-APIKEY"]).toBe("test-read-key");
@@ -47,6 +49,9 @@ function transport(override?: (u: URL) => unknown) {
     if (custom !== undefined) return Response.json(custom);
     let result: unknown;
     switch (u.pathname) {
+      case "/sapi/v1/asset/transfer":
+        result = { total: 0, rows: [] };
+        break;
       case "/dapi/v1/time":
         result = { serverTime: Date.now() };
         break;

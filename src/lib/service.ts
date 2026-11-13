@@ -10,7 +10,8 @@ import { demoData, demoHistory } from "./demo";
 import { STABLECOINS, totalPnl, valueHoldings, resolveEquity } from "./portfolio";
 import { readHistory, saveSnapshot } from "./storage";
 import type { Dashboard, ProviderData } from "./types";
-import { tradeRealizedPnl } from "./trade-pnl";
+import { physicalHoldings } from "./physical-holdings";
+import { coinInventory } from "./coin-inventory";
 import { readCosts } from "./cost-store";
 import { closedReview } from "./closed-review";
 import { trackHedges } from "./hedge-tracking";
@@ -111,18 +112,25 @@ export async function dashboard(
   } catch {
     costStorageFailed = true;
   }
-  const accounting = tradeRealizedPnl(data.ledger, data.tradesComplete);
+  const inventory = coinInventory(data);
+  const accounting = inventory.accounting;
+  const effectiveCosts: Record<string, string> = { ...costs, USDT: "1" };
+  for (const [asset, book] of Object.entries(inventory.assets)) {
+    if (book.averageCost === null) delete effectiveCosts[asset];
+    else effectiveCosts[asset] = book.averageCost;
+  }
   const coinWallets = (data.futures?.coinWallets ?? []).map((w) => ({
     ...w,
-    averageCost: costs[w.asset] ?? null,
-    holdingPnl:
-      costs[w.asset] === undefined
-        ? new Decimal(w.walletBalance).isZero()
-          ? "0"
-          : null
-        : new Decimal(w.walletBalance).mul(new Decimal(w.price).minus(costs[w.asset])).toString(),
+    averageCost: inventory.assets[w.asset]?.averageCost ?? null,
+    holdingPnl: new Decimal(w.walletBalance).isZero()
+      ? "0"
+      : inventory.assets[w.asset]?.averageCost != null
+        ? new Decimal(w.walletBalance)
+            .mul(new Decimal(w.price).minus(inventory.assets[w.asset].averageCost!))
+            .toString()
+        : null,
   }));
-  const spotHoldings = valueHoldings(data.balances, data.tickers, { ...costs, USDT: "1" });
+  const spotHoldings = valueHoldings(data.balances, data.tickers, effectiveCosts);
   const sum = (values: (string | null)[]) =>
     values.reduce<Decimal>((a, v) => a.plus(v ?? 0), new Decimal(0)).toString();
   const spotValuation = resolveEquity(spotHoldings, data.spotEquity);
@@ -184,10 +192,14 @@ export async function dashboard(
     );
   const missingCosts = [
     ...new Set([
-      ...nonStableHoldings.filter((h) => h.averageCost === null).map((h) => h.asset),
-      ...coinWallets.filter((w) => w.holdingPnl === null).map((w) => w.asset),
+      ...nonStableHoldings
+        .filter((h) => h.averageCost === null && !inventory.assets[h.asset])
+        .map((h) => h.asset),
     ]),
   ];
+  for (const [asset, book] of Object.entries(inventory.assets))
+    if (!book.complete)
+      warnings.push(`${asset} 币资产账本待核对：${book.issues.join("、")}。暂不套用手工成本。`);
   if (costStorageFailed) warnings.push("管理员成本暂时无法读取，未实现盈亏暂停计算，请稍后重试。");
   else if (missingCosts.length)
     warnings.push(
@@ -202,13 +214,20 @@ export async function dashboard(
   if (accounting.unsupported)
     warnings.push("成交记录包含非 USDT 交易对，跨币成本尚未核算，暂不显示已实现盈亏总额。");
   warnings.push(
-    "已实现盈亏逐笔累计：买入记当笔手续费的负值；卖出记平仓收益减当笔卖出手续费，已扣的买入手续费不再扣除。同步期间显示已读取成交的暂计值，可能随历史补齐调整。手工成本只影响未实现盈亏，转账、闪兑等非成交变动不在此口径内。",
+    "已实现盈亏逐笔累计：买入记当笔手续费的负值；卖出记平仓收益减当笔卖出手续费，已扣的买入手续费不再扣除。同步期间显示已读取成交的暂计值，可能随历史补齐调整。币本位保证金币按跨钱包移动加权成本核算；结算收益按发生时的分钟行情入账，币支付产生的价差单独计入已实现盈亏。其他币种仍采用管理员成本。",
   );
   if (accounting.estimatedFees)
     warnings.push(
       "BNB 等第三币手续费按成交所在分钟的历史收盘价折算 USDT，属于近似折算，不使用当前行情或手工成本。",
     );
-  const review = closedReview(data, holdings);
+  const review = closedReview(
+    data,
+    [
+      ...physicalHoldings({ holdings, coinWallets, summary: { equity } } as Dashboard),
+      ...holdings.filter((h) => h.instrument === "futures"),
+    ],
+    inventory.assets,
+  );
   review.complete &&= !futuresEnabled || data.futures?.tradesComplete === true;
   const combinedTrades = [...data.trades, ...(data.futures?.trades ?? [])].sort(
     (a, b) => b.time - a.time,
@@ -225,6 +244,7 @@ export async function dashboard(
     holdings,
     positionDetails: data.futures?.positions ?? [],
     coinWallets,
+    coinInventory: inventory.assets,
     hedgePeriods: data.hedgePeriods ?? {},
     closedReview: review,
     trades: combinedTrades.slice(0, 1000),
@@ -244,7 +264,8 @@ export async function dashboard(
         : {}),
       unrealizedPnl: holdingPnl,
       holdingPnlComplete:
-        !futuresEnabled || (data.futures?.complete === true && futures.fundingPnl !== null),
+        holdingPnl !== null &&
+        (!futuresEnabled || (data.futures?.complete === true && futures.fundingPnl !== null)),
       realizedPnl,
       realizedPnlComplete,
       feePnl: combine(accounting.feePnl, futures.feePnl),
@@ -255,6 +276,9 @@ export async function dashboard(
             : "历史同步中 · 已同步成交暂计（含手续费）"
           : [
               ...(futuresEnabled && futures.realizedPnl === null ? ["合约流水待核算"] : []),
+              ...(Object.values(inventory.assets).some((a) => !a.complete)
+                ? ["币资产账本待核对"]
+                : []),
               ...(!data.tradesComplete ? ["成交历史同步中"] : []),
               ...(accounting.missingBuys.length
                 ? [`缺 ${accounting.missingBuys.join("、")} 历史买入`]

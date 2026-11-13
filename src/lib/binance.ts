@@ -84,7 +84,7 @@ export class BinanceClient {
     let data: unknown;
     try {
       data =
-        this.market !== "spot"
+        this.market !== "spot" || path.startsWith("/sapi/")
           ? JSON.parse(await response.text(), (key, value, context?: { source: string }) =>
               ["id", "orderId", "tranId", "algoId", "tradeId"].includes(key) &&
               typeof value === "number"

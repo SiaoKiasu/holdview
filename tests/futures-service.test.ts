@@ -235,10 +235,98 @@ it("combines spot, UM and CM wallets once and persists separate history cursors"
   expect(d.summary).toMatchObject({
     equity: "1216",
     futuresEquity: "366",
-    unrealizedPnl: "112",
+    unrealizedPnl: null,
     equityComplete: true,
   });
-  expect(d.coinWallets![0].holdingPnl).toBe("100");
+  expect(d.coinWallets![0].holdingPnl).toBeNull();
+  expect(d.coinInventory!.BTC.complete).toBe(false);
   expect(mocks.save.mock.calls[0][1].coinFutures).toEqual(cm.ledger);
   expect(mocks.save.mock.calls[0][1].futures.incomes).toHaveLength(3);
+});
+
+it("rebuilds collateral basis from fills and settlement credits rather than applying manual cost to new coins", async () => {
+  const c = setup(),
+    spot = await mocks.spot(),
+    cm = await mocks.coin();
+  spot.ledger.markets.BTCUSDT = {
+    baseAsset: "BTC",
+    quoteAsset: "USDT",
+    nextId: "2",
+    checkedAt: 300000,
+    complete: true,
+    trades: [
+      {
+        id: "1",
+        symbol: "BTCUSDT",
+        side: "BUY",
+        price: "100",
+        quantity: "1",
+        quoteQuantity: "100",
+        fee: "0",
+        feeAsset: "USDT",
+        time: 60000,
+        isMaker: false,
+      },
+    ],
+  };
+  cm.coinWallets = [
+    {
+      asset: "BTC",
+      walletBalance: "1.1",
+      marginBalance: "1.1",
+      unrealizedProfit: "0",
+      availableBalance: "1.1",
+      initialMargin: "0",
+      price: "200",
+    },
+  ];
+  cm.account = { equity: "220", walletBalance: "220", availableBalance: "220", initialMargin: "0" };
+  cm.ledger.incomes = [
+    {
+      contractMarket: "coin",
+      tranId: "1",
+      symbol: "BTCUSD_PERP",
+      incomeType: "FUNDING_FEE",
+      income: "0.1",
+      asset: "BTC",
+      time: 180000,
+    },
+  ];
+  cm.ledger.feeRates = { "BTC:180000": "200" };
+  cm.ledger.transfers = {
+    complete: true,
+    directions: {},
+    rows: [
+      {
+        tranId: "1",
+        asset: "BTC",
+        amount: "1",
+        type: "MAIN_CMFUTURE",
+        status: "CONFIRMED",
+        timestamp: 120000,
+      },
+    ],
+  };
+  mocks.spot.mockResolvedValue(spot);
+  mocks.coin.mockResolvedValue(cm);
+  const d = await dashboard(c, true);
+  expect(d.summary).toMatchObject({
+    equity: "1236",
+    futuresEquity: "386",
+    unrealizedPnl: "132",
+    realizedPnl: "4",
+    realizedPnlComplete: true,
+    holdingPnlComplete: true,
+  });
+  expect(d.coinInventory!.BTC).toMatchObject({
+    cost: "120",
+    quantity: "1.1",
+    fundingValue: "20",
+    complete: true,
+  });
+  expect(Number(d.coinWallets![0].averageCost)).toBeCloseTo(120 / 1.1, 10);
+  expect(Number(d.coinWallets![0].holdingPnl)).toBeCloseTo(100, 10);
+  expect(d.holdings.filter((h) => h.instrument !== "futures").some((h) => h.asset === "BTC")).toBe(
+    false,
+  );
 });

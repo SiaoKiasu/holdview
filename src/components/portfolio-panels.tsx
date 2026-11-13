@@ -5,6 +5,8 @@ import Decimal from "decimal.js";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { buildExposure, type PositionGroup } from "@/lib/exposure";
 import { contractLabel, positionBasis, positionNotional } from "@/lib/futures-units";
+import { physicalHoldings } from "@/lib/physical-holdings";
+import { STABLECOINS } from "@/lib/assets";
 import { assetNames } from "@/lib/asset-names";
 import { formatPrice } from "@/lib/price-format";
 import type { Dashboard, FuturesPosition } from "@/lib/types";
@@ -427,13 +429,18 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
         (g.grossExposure ?? (g.positions.length ? null : g.spot?.value)) == null ||
         D(g.grossExposure ?? g.spot?.value ?? 0).gte(1),
     );
-  const spot = groups.filter((g) => g.spot);
+  const allSpot = physicalHoldings(data);
+  const spot = allSpot.filter(
+    (h) =>
+      (h.asset.toLowerCase().includes(search.toLowerCase()) ||
+        (assetNames[h.asset] ?? "").includes(search)) &&
+      (small || h.value === null || D(h.value).gte(1)),
+  );
   const positions = groups.flatMap((g) => g.positions);
   const notional =
     e.positionsReady && !e.unsupported.length
       ? positions.reduce((v, a) => v.plus(positionNotional(a)), D(0)).toString()
       : null;
-  const allSpot = data.holdings.filter((h) => h.instrument !== "futures");
   const spotValue = allSpot.every((h) => h.value !== null)
     ? allSpot.reduce((v, h) => v.plus(h.value!), D(0)).toString()
     : null;
@@ -441,12 +448,20 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
     e.positionsReady && !e.unsupported.length
       ? positions.reduce((v, a) => v.plus(a.unRealizedProfit), D(0)).toString()
       : null;
-  const shownPnl = mode === "futures" ? futuresPnl : data.summary.unrealizedPnl;
+  const spotPnl = allSpot.filter((h) => !STABLECOINS.has(h.asset));
+  const shownPnl =
+    mode === "futures"
+      ? futuresPnl
+      : mode === "spot"
+        ? spotPnl.every((h) => h.unrealizedPnl !== null)
+          ? spotPnl.reduce((n, h) => n.plus(h.unrealizedPnl!), D(0)).toString()
+          : null
+        : data.summary.unrealizedPnl;
   return (
     <div className="portfolio-upgrade">
       <section className="exposure-strip">
         <div>
-          <span>{mode === "futures" ? "合约权益" : "现货市值 · 含稳定币"}</span>
+          <span>{mode === "futures" ? "合约权益" : "币资产市值 · 含保证金币"}</span>
           <strong>
             {n(mode === "futures" ? data.summary.futuresEquity : spotValue)}
             <small>USDT</small>
@@ -623,48 +638,152 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
                 </tr>
               </thead>
               <tbody>
-                {spot.map((g) => {
-                  const h = g.spot!;
+                {spot.map((h) => {
+                  const book = data.coinInventory?.[h.asset];
+                  const wallet = data.coinWallets?.find((w) => w.asset === h.asset);
+                  const opened = expanded.includes(h.asset);
                   const rate =
                     h.averageCost !== null && D(h.averageCost).gt(0) && h.price !== null
                       ? D(h.price).div(h.averageCost).minus(1).mul(100).toString()
                       : null;
                   return (
-                    <tr key={g.asset}>
-                      <td>
-                        <div className="asset-cell">
-                          <CoinIcon asset={g.asset} />
-                          <div>
-                            <strong>{g.asset}</strong>
-                            <small>{assetNames[g.asset] ?? "其他资产"}</small>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        {n(h.quantity, 8)}
-                        <small>冻结 {n(h.locked, 8)}</small>
-                      </td>
-                      <td>{p(h.averageCost)}</td>
-                      <td>{p(h.price)}</td>
-                      <td>{n(h.value)}</td>
-                      <td className={tone(h.unrealizedPnl)}>
-                        {g.stable ? (
-                          "—"
-                        ) : (
-                          <>
-                            {n(h.unrealizedPnl, 2, true)}
-                            <small>
-                              （{n(rate, 2, true)}
-                              {hidden ? "" : "%"}）
-                            </small>
-                          </>
-                        )}
-                      </td>
-                      <td>
-                        {n(data.summary.equityComplete ? h.allocation : null)}
-                        {hidden ? "" : "%"}
-                      </td>
-                    </tr>
+                    <Fragment key={h.asset}>
+                      <tr>
+                        <td>
+                          <button
+                            className="futures-asset-button"
+                            disabled={!book && !wallet}
+                            aria-label={`${h.asset} 币资产明细`}
+                            aria-expanded={opened}
+                            onClick={() =>
+                              setExpanded((v) =>
+                                opened ? v.filter((a) => a !== h.asset) : [...v, h.asset],
+                              )
+                            }
+                          >
+                            <CoinIcon asset={h.asset} />
+                            <span>
+                              <strong>{h.asset}</strong>
+                              <small>{assetNames[h.asset] ?? "其他资产"}</small>
+                              {D(h.walletQuantity).gt(0) && (
+                                <small className="coin-location-tag">含保证金币</small>
+                              )}
+                            </span>
+                            {(book || wallet) &&
+                              (opened ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
+                          </button>
+                        </td>
+                        <td>
+                          {n(h.quantity, 8)}
+                          <small>现货冻结 {n(h.locked, 8)}</small>
+                        </td>
+                        <td>
+                          {p(h.averageCost)}
+                          {book && <small>{book.complete ? "账本均价" : "账本待核对"}</small>}
+                        </td>
+                        <td>{p(h.price)}</td>
+                        <td>{n(h.value)}</td>
+                        <td className={tone(h.unrealizedPnl)}>
+                          {STABLECOINS.has(h.asset) ? (
+                            "—"
+                          ) : (
+                            <>
+                              {n(h.unrealizedPnl, 2, true)}
+                              <small>
+                                （{n(rate, 2, true)}
+                                {hidden ? "" : "%"}）
+                              </small>
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          {n(data.summary.equityComplete ? h.allocation : null)}
+                          {hidden ? "" : "%"}
+                        </td>
+                      </tr>
+                      {opened && (book || wallet) && (
+                        <tr className="portfolio-expanded">
+                          <td colSpan={7}>
+                            <div className="coin-inventory-detail">
+                              <div className="coin-inventory-heading">
+                                <h3>{h.asset} 币资产账本</h3>
+                                <span>现货与保证金币统一加权成本</span>
+                              </div>
+                              <div className="coin-inventory-grid">
+                                <div>
+                                  <span>现货钱包 · {h.asset}</span>
+                                  <strong>{n(h.spotQuantity, 8)}</strong>
+                                </div>
+                                <div>
+                                  <span>保证金钱包 · {h.asset}</span>
+                                  <strong>{n(h.walletQuantity, 8)}</strong>
+                                </div>
+                                <div>
+                                  <span>持币成本 · USDT</span>
+                                  <strong>{n(book?.cost)}</strong>
+                                </div>
+                                <div>
+                                  <span>币价盈亏 · USDT</span>
+                                  <strong className={tone(h.unrealizedPnl)}>
+                                    {n(h.unrealizedPnl, 2, true)}
+                                  </strong>
+                                </div>
+                              </div>
+                              {book && (
+                                <div className="coin-settlement-table">
+                                  <table>
+                                    <thead>
+                                      <tr>
+                                        <th>已结算流水</th>
+                                        <th>币数量 · {h.asset}</th>
+                                        <th>发生时折算 · USDT</th>
+                                        <th>计入</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {[
+                                        [
+                                          "合约平仓",
+                                          book.realizedCoin,
+                                          book.realizedValue,
+                                          "已实现盈亏",
+                                        ],
+                                        ["资金费", book.fundingCoin, book.fundingValue, "持仓盈亏"],
+                                        [
+                                          "合约手续费",
+                                          book.commissionCoin,
+                                          book.commissionValue,
+                                          "已实现盈亏",
+                                        ],
+                                      ].map(([label, qty, value, destination]) => (
+                                        <tr key={label!}>
+                                          <td>{label}</td>
+                                          <td className={tone(qty)}>{n(qty, 8, true)}</td>
+                                          <td className={tone(value)}>{n(value, 2, true)}</td>
+                                          <td>{destination}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                              <div className="coin-inventory-footer">
+                                <span>
+                                  合约未结算 {n(wallet?.unrealizedProfit, 8, true)} {h.asset} ·
+                                  不计入持币数量
+                                </span>
+                                <span>
+                                  币支付价差 {n(book?.disposalPnl, 2, true)} USDT · 已计入已实现盈亏
+                                </span>
+                              </div>
+                              {book && !book.complete && (
+                                <p className="negative">{book.issues.join(" · ")}</p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -689,6 +808,7 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
                 <tr>
                   <th>保证金币</th>
                   <th>钱包余额</th>
+                  <th>未结算盈亏 · 币</th>
                   <th>账户权益 · 币</th>
                   <th>权益折算 / USDT</th>
                 </tr>
@@ -698,6 +818,7 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
                   <tr key={w.asset}>
                     <td>{w.asset}</td>
                     <td>{n(w.walletBalance, 8)}</td>
+                    <td className={tone(w.unrealizedProfit)}>{n(w.unrealizedProfit, 8, true)}</td>
                     <td>{n(w.marginBalance, 8)}</td>
                     <td>{n(D(w.marginBalance).mul(w.price).toString())}</td>
                   </tr>

@@ -91,6 +91,7 @@ export type ProviderData = {
   ordersComplete: boolean;
 };
 export type Dashboard = {
+  coinInventory?: Record<string, import("./coin-inventory").CoinInventory>;
   marketUpdatedAt?: number;
   marketComplete?: boolean;
   positionDetails?: FuturesPosition[];
@@ -193,7 +194,25 @@ export type FuturesPosition = {
   unRealizedProfit: string;
   marginAsset: string;
 };
+export type CoinTransferHistory = {
+  rows: {
+    tranId: string;
+    asset: string;
+    amount: string;
+    type: "MAIN_CMFUTURE" | "CMFUTURE_MAIN";
+    status: string;
+    timestamp: number;
+  }[];
+  complete?: boolean;
+  directions: Partial<
+    Record<
+      "MAIN_CMFUTURE" | "CMFUTURE_MAIN",
+      { through: number; pending?: { start: number; end: number; page: number } }
+    >
+  >;
+};
 export type FuturesLedger = {
+  transfers?: CoinTransferHistory;
   incomeWindows?: { startTime: number; endTime: number }[];
   trades?: Trade[];
   tradeSync?: Record<
