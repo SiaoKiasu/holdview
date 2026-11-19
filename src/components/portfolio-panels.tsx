@@ -11,6 +11,7 @@ import { assetNames } from "@/lib/asset-names";
 import { formatPrice } from "@/lib/price-format";
 import type { Dashboard, FuturesPosition } from "@/lib/types";
 import { CoinIcon } from "./coin-icon";
+import { CoinReturnsPanel } from "./coin-returns-panel";
 
 const D = (v: string | number) => new Decimal(v);
 function presentation(hidden: boolean) {
@@ -485,6 +486,7 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
           </strong>
         </div>
       </section>
+      <CoinReturnsPanel data={data} hidden={hidden} />
       <section className="panel portfolio-table-panel">
         <div className="portfolio-toolbar">
           <div className="portfolio-toolbar-heading">

@@ -4135,3 +4135,131 @@ td small.inline {
   font-size: 10px;
   font-weight: 400;
 }
+
+.coin-returns-panel {
+  overflow: hidden;
+}
+.coin-returns-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 24px 28px;
+}
+.coin-returns-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.coin-returns-title h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.coin-returns-title > span {
+  color: var(--muted);
+  font-size: 11px;
+  background: var(--surface-soft);
+  padding: 5px 8px;
+  border-radius: 4px;
+}
+.coin-returns-totals {
+  display: flex;
+  gap: 40px;
+}
+.coin-returns-totals > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.coin-returns-totals > div + div {
+  border-left: 1px solid var(--line);
+  padding-left: 40px;
+}
+.coin-returns-totals span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.coin-returns-totals small {
+  margin-left: 6px;
+  font-size: 10px;
+}
+.coin-returns-totals strong {
+  font-size: 25px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.coin-returns-table {
+  min-width: 980px;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.coin-returns-table th,
+.coin-returns-table td {
+  padding: 18px 20px;
+  text-align: right;
+  white-space: nowrap;
+}
+.coin-returns-table thead th {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  background: var(--surface-soft);
+}
+.coin-returns-table th:first-child {
+  text-align: left;
+  padding-left: 28px;
+}
+.coin-returns-table th:last-child,
+.coin-returns-table td:last-child {
+  padding-right: 28px;
+}
+.coin-returns-table small {
+  font-size: 10px;
+  margin-left: 4px;
+}
+.coin-returns-table tbody th {
+  background: var(--surface);
+  font-size: 13px;
+}
+.coin-returns-table td {
+  font-size: 13px;
+}
+.coin-returns-table .coin-returns-net {
+  background: var(--surface-tint);
+}
+.coin-returns-net strong {
+  font-weight: 600;
+}
+.coin-returns-asset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.coin-returns-note {
+  margin: 0;
+  padding: 14px 28px;
+  color: var(--muted);
+  font-size: 11px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 800px) {
+  .coin-returns-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 20px;
+    gap: 22px;
+  }
+  .coin-returns-totals {
+    width: 100%;
+    gap: 24px;
+  }
+  .coin-returns-totals > div {
+    flex: 1;
+  }
+  .coin-returns-totals > div + div {
+    padding-left: 24px;
+  }
+  .coin-returns-note {
+    padding: 14px 20px;
+  }
+}
