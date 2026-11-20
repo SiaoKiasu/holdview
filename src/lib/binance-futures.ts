@@ -28,6 +28,7 @@ const positionsSchema = z.array(
     positionSide: z.enum(["BOTH", "LONG", "SHORT"]),
     positionAmt: decimal,
     entryPrice: decimal,
+    breakEvenPrice: decimal.nullish(),
     markPrice: decimal,
     unRealizedProfit: decimal,
     marginAsset: z.string(),

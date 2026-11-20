@@ -11,6 +11,7 @@ const pos = {
   positionSide: "BOTH",
   positionAmt: "2",
   entryPrice: "50",
+  breakEvenPrice: "50.125",
   markPrice: "55",
   unRealizedProfit: "10",
   marginAsset: "USDT",
@@ -60,6 +61,7 @@ describe("read-only futures adapter", () => {
     const t = transport(() => [income(1), income(1, "FUNDING_FEE")]);
     const result = await new BinanceFuturesClient(config, t as typeof fetch).loadFutures();
     expect(result.positions[0].entryPrice).toBe("50");
+    expect(result.positions[0].breakEvenPrice).toBe("50.125");
     expect(result.account?.equity).toBe("160");
     expect(result.ledger.incomes).toHaveLength(2);
     expect(result.complete).toBe(true);

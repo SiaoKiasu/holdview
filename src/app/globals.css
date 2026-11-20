@@ -3949,7 +3949,7 @@ td small.inline {
   color: var(--muted);
 }
 .hedge-comparison-table {
-  min-width: 1180px;
+  min-width: 1300px;
   width: 100%;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;

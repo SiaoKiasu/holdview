@@ -190,6 +190,7 @@ export type FuturesPosition = {
   positionSide: "BOTH" | "LONG" | "SHORT";
   positionAmt: string;
   entryPrice: string;
+  breakEvenPrice?: string | null;
   markPrice: string;
   unRealizedProfit: string;
   marginAsset: string;

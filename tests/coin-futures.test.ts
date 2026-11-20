@@ -91,6 +91,7 @@ function transport(override?: (u: URL) => unknown) {
             positionSide: "SHORT",
             positionAmt: "-100",
             entryPrice: "50000",
+            breakEvenPrice: "49920.125",
             markPrice: "50000",
             unRealizedProfit: "0",
             marginType: "cross",
@@ -245,6 +246,7 @@ describe("COIN-M integration", () => {
     expect(cm.positions[0]).toMatchObject({
       contractMarket: "coin",
       contracts: "-100",
+      breakEvenPrice: "49920.125",
       contractSize: "100",
       positionAmt: "-0.2",
       unRealizedProfit: "0",

@@ -905,6 +905,7 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
                     <th>标的 / 状态</th>
                     <th>合约仓位</th>
                     <th>入场价格</th>
+                    <th title="Binance 返回的当前合约仓位盈亏平衡价">盈亏平衡价</th>
                     <th>标记价格</th>
                     <th>强平价格</th>
                     <th>合约浮动盈亏</th>
@@ -982,6 +983,14 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
                               <small>{unit}</small>
                             </td>
                             <td>
+                              {p(
+                                v.breakEvenPrice && D(v.breakEvenPrice).gt(0)
+                                  ? v.breakEvenPrice
+                                  : null,
+                              )}
+                              <small>{unit}</small>
+                            </td>
+                            <td>
                               {p(v.markPrice)}
                               <small>{unit}</small>
                             </td>
@@ -1030,7 +1039,7 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
                       })}
                       {expanded && (
                         <tr className="hedge-comparison-detail-row">
-                          <td colSpan={8}>
+                          <td colSpan={9}>
                             <div className="hedge-detail hedge-inline-detail">
                               <div className="overview-panel-heading">
                                 <div>
