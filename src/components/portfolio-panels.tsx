@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import Decimal from "decimal.js";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { hedgeBreakEvenPrice } from "@/lib/hedge-breakeven";
 import { buildExposure, type PositionGroup } from "@/lib/exposure";
 import { contractLabel, positionBasis, positionNotional } from "@/lib/futures-units";
 import { physicalHoldings } from "@/lib/physical-holdings";
@@ -905,7 +906,9 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
                     <th>标的 / 状态</th>
                     <th>合约仓位</th>
                     <th>入场价格</th>
-                    <th title="Binance 返回的当前合约仓位盈亏平衡价">盈亏平衡价</th>
+                    <th title="持币（含保证金币）亏损与未平合约盈利相抵的理论价格；同币种同价，USD/USDT 按等值，不含手续费和资金费。">
+                      对冲回本价
+                    </th>
                     <th>标记价格</th>
                     <th>强平价格</th>
                     <th>合约浮动盈亏</th>
@@ -916,6 +919,7 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
                 {groups.map((g) => {
                   const expanded = expandedAssets.includes(g.asset);
                   const period = periods[g.asset];
+                  const breakEven = hedgeBreakEvenPrice(g);
                   return (
                     <tbody key={g.asset} className={expanded ? "is-expanded" : ""}>
                       {g.positions.map((v, index) => {
@@ -982,14 +986,12 @@ export function HedgePanel({ data, hidden }: { data: Dashboard; hidden: boolean 
                               {p(v.entryPrice)}
                               <small>{unit}</small>
                             </td>
-                            <td>
-                              {p(
-                                v.breakEvenPrice && D(v.breakEvenPrice).gt(0)
-                                  ? v.breakEvenPrice
-                                  : null,
-                              )}
-                              <small>{unit}</small>
-                            </td>
+                            {index === 0 && (
+                              <td rowSpan={g.positions.length}>
+                                {p(breakEven)}
+                                <small>{breakEven === null ? "" : "USDT"}</small>
+                              </td>
+                            )}
                             <td>
                               {p(v.markPrice)}
                               <small>{unit}</small>
