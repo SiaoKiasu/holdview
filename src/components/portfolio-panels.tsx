@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { hedgeBreakEvenPrice } from "@/lib/hedge-breakeven";
 import { buildExposure, type PositionGroup } from "@/lib/exposure";
 import { contractLabel, positionBasis, positionNotional } from "@/lib/futures-units";
+import { buildCoinReturns } from "@/lib/coin-returns";
 import { physicalHoldings } from "@/lib/physical-holdings";
 import { STABLECOINS } from "@/lib/assets";
 import { assetNames } from "@/lib/asset-names";
@@ -431,6 +432,9 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
         (g.grossExposure ?? (g.positions.length ? null : g.spot?.value)) == null ||
         D(g.grossExposure ?? g.spot?.value ?? 0).gte(1),
     );
+  const coinReturns = new Map(
+    buildCoinReturns(data.coinInventory, data.coinWallets).rows.map((r) => [r.asset, r]),
+  );
   const allSpot = physicalHoldings(data);
   const spot = allSpot.filter(
     (h) =>
@@ -633,6 +637,7 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
               <tbody>
                 {spot.map((h) => {
                   const book = data.coinInventory?.[h.asset];
+                  const netCoin = coinReturns.get(h.asset)?.netCoin;
                   const wallet = data.coinWallets?.find((w) => w.asset === h.asset);
                   const opened = expanded.includes(h.asset);
                   const rate =
@@ -706,11 +711,14 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
                                   <strong>{n(h.walletQuantity, 8)}</strong>
                                 </div>
                                 <div>
-                                  <span>持币成本 · USDT</span>
-                                  <strong>{n(book?.cost)}</strong>
+                                  <span title="已结算平仓收益 + 手续费净额 + 资金费；不含划转和未结算浮盈亏。">
+                                    币本位盈亏 · {h.asset}
+                                    {book && !book.complete ? " · 暂计" : ""}
+                                  </span>
+                                  <strong className={tone(netCoin)}>{n(netCoin, 8, true)}</strong>
                                 </div>
                                 <div>
-                                  <span>币价盈亏 · USDT</span>
+                                  <span>U 本位盈亏 · USDT</span>
                                   <strong className={tone(h.unrealizedPnl)}>
                                     {n(h.unrealizedPnl, 2, true)}
                                   </strong>
