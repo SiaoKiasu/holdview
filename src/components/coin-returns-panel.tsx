@@ -63,7 +63,7 @@ export function CoinReturnsPanel({
           <thead>
             <tr>
               <th>结算币种</th>
-              <th title="当前币数减累计已结算净增币；现货与保证金币合并计算，随买卖及外部转入转出调整，并非首次开仓时的固定币数。">
+              <th title="当前币数减累计已结算净币数；现货与保证金币合并计算，随买卖及外部转入转出调整，并非首次开仓时的固定币数。">
                 初始币数
               </th>
               <th title="现货与币本位钱包的已结算持币数量，不含合约浮盈亏。">当前币数</th>
@@ -71,14 +71,12 @@ export function CoinReturnsPanel({
                 className="coin-returns-net"
                 title="平仓收益 + 手续费净额 + 资金费；不含划转和未结算浮盈亏。"
               >
-                已结算净增币
+                已结算净币数
               </th>
               <th title="本币种的合约平仓收益扣除交易费用，按各笔发生时的价格折算。">
                 已实现盈亏 <small>USDT</small>
               </th>
-              <th>
-                未结算浮盈亏 <small>币</small>
-              </th>
+              <th>未结算净币数</th>
               <th title="币本位合约未结算浮盈亏按当前币价折算，不含持币本身的币价涨跌。">
                 未实现盈亏 <small>USDT</small>
               </th>
