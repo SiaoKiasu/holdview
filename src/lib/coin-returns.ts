@@ -18,12 +18,27 @@ export function buildCoinReturns(
     const book = books[asset];
     const wallet = wallets.find((w) => w.asset === asset);
     const feeCoin = sum([book?.commissionCoin, book?.rebateCoin]);
+    const netCoin = sum([book?.realizedCoin, feeCoin, book?.fundingCoin]);
+    const currentCoin = book?.quantity ?? null;
+    // Adjusted principal across both wallets; internal transfers do not change it.
+    // This is not the immutable quantity at the first hedge entry.
+    const initialCoin =
+      book?.complete && currentCoin !== null && netCoin !== null
+        ? new Decimal(currentCoin).minus(netCoin).toString()
+        : null;
+    const unrealizedValue =
+      wallet && new Decimal(wallet.price).gt(0)
+        ? new Decimal(wallet.unrealizedProfit).mul(wallet.price).toString()
+        : null;
     return {
       asset,
+      currentCoin,
+      initialCoin,
+      unrealizedValue,
       realizedCoin: book?.realizedCoin ?? null,
       feeCoin,
       fundingCoin: book?.fundingCoin ?? null,
-      netCoin: sum([book?.realizedCoin, feeCoin, book?.fundingCoin]),
+      netCoin,
       // Sum historical event valuations, never multiply total coin by today's price.
       realizedValue: sum([book?.realizedValue, book?.commissionValue, book?.rebateValue]),
       fundingValue: book?.fundingValue ?? null,

@@ -41,12 +41,17 @@ describe("coin-margined settled returns", () => {
       netCoin: "0.00162",
       realizedValue: "114.9",
       unrealizedCoin: "0.001",
+      currentCoin: "2",
+      initialCoin: "1.99838",
+      unrealizedValue: "90",
     });
     expect(r.fundingValue).toBe("-21");
     // A mark-price move cannot change earned coins or their historical valuation.
     const repriced = buildCoinReturns({ BTC: book({ quantity: "20", disposalPnl: "200" }) }, [
       { ...wallet, price: "100000", unrealizedProfit: "0.02" },
     ]);
+    expect(repriced.rows[0].unrealizedValue).toBe("2000");
+    expect(repriced.rows[0].initialCoin).toBe("19.99838");
     expect(repriced.realizedValue).toBe(r.realizedValue);
     expect(repriced.rows[0].netCoin).toBe(r.rows[0].netCoin);
   });
@@ -82,6 +87,8 @@ describe("coin-margined settled returns", () => {
     expect(r.complete).toBe(false);
     expect(r.rows[0].netCoin).toBe("0.00162");
     expect(r.rows[1].netCoin).toBeNull();
+    expect(r.rows[0].initialCoin).toBeNull();
+    expect(r.rows[1].currentCoin).toBeNull();
   });
   it("immediately recognizes fees before any position is closed", () => {
     const r = buildCoinReturns({
@@ -100,7 +107,7 @@ describe("coin-margined settled returns", () => {
   it("presents tentative data and hides all financial numbers in privacy mode", () => {
     const data = { coinInventory: { BTC: book({ complete: false }) }, coinWallets: [wallet] };
     const html = renderToStaticMarkup(createElement(CoinReturnsPanel, { data, hidden: false }));
-    expect(html).toContain("暂计 · 待核对");
+    expect(html).toContain("历史流水待核对");
     expect(html).toContain("+0.00162");
     expect(html).toContain("+114.90");
     const masked = renderToStaticMarkup(createElement(CoinReturnsPanel, { data, hidden: true }));

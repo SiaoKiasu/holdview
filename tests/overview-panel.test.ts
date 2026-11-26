@@ -145,7 +145,7 @@ describe("shared account holding PnL", () => {
     ["0", "0.00"],
     [null, "—"],
   ])(
-    "keeps the holdings headline aligned with overview for %s, including unknown contract data",
+    "keeps the account headline in overview only for %s, including unknown contract data",
     (pnl, label) => {
       const data = fixture();
       // The visible spot subtotal is +20.10. The account value additionally
@@ -154,10 +154,10 @@ describe("shared account holding PnL", () => {
       const holdings = renderToStaticMarkup(
         createElement(PortfolioHoldings, { data, hidden: false }),
       );
-      const headline = holdings.slice(0, holdings.indexOf("</section>"));
-      expect(headline).toContain(`>${label}<small>USDT</small>`);
+      expect(holdings).not.toContain('class="exposure-strip"');
+      expect(holdings).not.toContain("币本位钱包");
+      expect(holdings).not.toContain("现金与保证金");
       expect(render(data)).toContain(`>${label}<small>USDT</small>`);
-      expect(headline).not.toContain(">+20.10<");
     },
   );
   it("conceals the shared headline in privacy mode", () => {

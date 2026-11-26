@@ -443,54 +443,8 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
       (small || h.value === null || D(h.value).gte(1)),
   );
   const positions = groups.flatMap((g) => g.positions);
-  const notional =
-    e.positionsReady && !e.unsupported.length
-      ? positions.reduce((v, a) => v.plus(positionNotional(a)), D(0)).toString()
-      : null;
-  const spotValue = allSpot.every((h) => h.value !== null)
-    ? allSpot.reduce((v, h) => v.plus(h.value!), D(0)).toString()
-    : null;
-  // This is the account headline, shared with Overview. Table filters and tabs
-  // must not silently replace it with only spot or selected-contract PnL.
-  const shownPnl = data.summary.unrealizedPnl;
   return (
     <div className="portfolio-upgrade">
-      <section className="exposure-strip">
-        <div>
-          <span>{mode === "futures" ? "合约权益" : "币资产市值 · 含保证金币"}</span>
-          <strong>
-            {n(mode === "futures" ? data.summary.futuresEquity : spotValue)}
-            <small>USDT</small>
-          </strong>
-        </div>
-        <div>
-          <span>合约名义金额 · 当前筛选</span>
-          <strong>
-            {n(notional)}
-            <small>USDT</small>
-          </strong>
-        </div>
-        <div>
-          <span>{mode === "futures" ? "保证金占用" : "对冲标的"}</span>
-          <strong>
-            {mode === "futures"
-              ? n(data.summary.futuresInitialMargin)
-              : hidden
-                ? "••••"
-                : e.positionsReady
-                  ? e.groups.filter((g) => g.hedged).length
-                  : "—"}
-            <small>{mode === "futures" ? "USDT" : "个"}</small>
-          </strong>
-        </div>
-        <div title="账户持仓盈亏 = 币资产盈亏（含保证金币）+ 合约浮动盈亏 + 累计资金费；不随下方筛选变化。">
-          <span>持仓盈亏</span>
-          <strong className={tone(shownPnl)}>
-            {n(shownPnl, 2, true)}
-            <small>USDT</small>
-          </strong>
-        </div>
-      </section>
       <CoinReturnsPanel data={data} hidden={hidden} />
       <section className="panel portfolio-table-panel">
         <div className="portfolio-toolbar">
@@ -799,52 +753,6 @@ export function PortfolioHoldings({ data, hidden }: { data: Dashboard; hidden: b
             {e.positionsReady || mode === "spot" ? "暂无匹配持仓" : "合约持仓待同步"}
           </div>
         )}
-      </section>
-      {(data.coinWallets?.length ?? 0) > 0 && (
-        <section className="panel portfolio-cash">
-          <h2>币本位钱包</h2>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>保证金币</th>
-                  <th>钱包余额</th>
-                  <th>未结算盈亏 · 币</th>
-                  <th>账户权益 · 币</th>
-                  <th>权益折算 / USDT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.coinWallets!.map((w) => (
-                  <tr key={w.asset}>
-                    <td>{w.asset}</td>
-                    <td>{n(w.walletBalance, 8)}</td>
-                    <td className={tone(w.unrealizedProfit)}>{n(w.unrealizedProfit, 8, true)}</td>
-                    <td>{n(w.marginBalance, 8)}</td>
-                    <td>{n(D(w.marginBalance).mul(w.price).toString())}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-      <section className="panel portfolio-cash">
-        <h2>现金与保证金</h2>
-        <div className="hedge-risk-grid">
-          {[
-            ["现货可用", data.summary.cashFree],
-            ["现货冻结", data.summary.cashLocked],
-            ["合约权益", data.summary.futuresEquity],
-            ["合约保证金占用", data.summary.futuresInitialMargin],
-            ["合约可用", data.summary.futuresAvailable],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <span>{label} · USDT</span>
-              <strong>{n(value)}</strong>
-            </div>
-          ))}
-        </div>
       </section>
     </div>
   );
